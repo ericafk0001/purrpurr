@@ -4,7 +4,11 @@ config.collision.debug = config.collision.debugEnabled; // initialize debug stat
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const socket = io();
+const socket = io(
+  location.hostname === "localhost"
+    ? "http://localhost:3000"
+    : "https://purrpurr-server.onrender.com"
+);
 
 let players = {};
 let myPlayer = null;
