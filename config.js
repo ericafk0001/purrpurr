@@ -22,9 +22,9 @@ const gameConfig = {
     maxStonePerCell: 2,
   },
   assets: {
-    player: "/assets/player.png",
-    tree: "/assets/tree.png",
-    stone: "/assets/stone.png",
+    player: "./assets/player.png",
+    tree: "./assets/tree.png",
+    stone: "./assets/stone.png",
   },
   collision: {
     enabled: true,

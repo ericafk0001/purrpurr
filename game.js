@@ -21,7 +21,13 @@ const camera = {
   y: 0,
 };
 
-const assets = {};
+const assets = {
+  loadStatus: {
+    player: false,
+    tree: false,
+    stone: false,
+  },
+};
 
 // enable image smoothing
 ctx.imageSmoothingEnabled = true;
@@ -30,8 +36,16 @@ ctx.imageSmoothingQuality = "high";
 function loadAssets() {
   Object.keys(config.assets).forEach((key) => {
     const img = new Image();
+    img.onload = () => {
+      assets[key] = img;
+      assets.loadStatus[key] = true;
+      console.log(`Loaded asset: ${key}`);
+    };
+    img.onerror = (err) => {
+      console.error(`Failed to load asset: ${key}`, err);
+      assets.loadStatus[key] = false;
+    };
     img.src = config.assets[key];
-    assets[key] = img;
   });
 }
 
@@ -149,7 +163,7 @@ function drawPlayers() {
 }
 
 function drawPlayer(player) {
-  if (assets.player) {
+  if (assets.player && assets.loadStatus.player) {
     ctx.save();
     ctx.translate(player.x - camera.x, player.y - camera.y);
     ctx.rotate(player.rotation || 0);
@@ -168,7 +182,7 @@ function drawPlayer(player) {
 }
 
 function drawTree(tree) {
-  if (assets.tree) {
+  if (assets.tree && assets.loadStatus.tree) {
     ctx.save();
     ctx.translate(tree.x - camera.x, tree.y - camera.y);
     ctx.rotate(tree.rotation || 0);
@@ -184,7 +198,7 @@ function drawTree(tree) {
 }
 
 function drawStone(stone) {
-  if (assets.stone) {
+  if (assets.stone && assets.loadStatus.stone) {
     ctx.save();
     ctx.translate(stone.x - camera.x, stone.y - camera.y);
     ctx.rotate(stone.rotation || 0);
