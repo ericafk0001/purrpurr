@@ -39,6 +39,13 @@ const gameConfig = {
       stone: 65,
     },
   },
+  chat: {
+    enabled: true,
+    bubbleDisplayTime: 3000, // 3 seconds
+    maxMessageLength: 50,
+    bubbleColor: "rgba(255, 255, 255, 0.9)",
+    textColor: "#000000",
+  },
 };
 
 if (typeof module !== "undefined" && module.exports) {

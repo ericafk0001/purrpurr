@@ -251,6 +251,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("chatMessage", (data) => {
+    if (data.message && data.message.length > 0) {
+      // broadcast message to all players
+      io.emit("playerMessage", {
+        playerId: socket.id,
+        message: data.message,
+      });
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("Player disconnected:", socket.id);
     delete players[socket.id];

@@ -50,9 +50,8 @@ socket.on("playerDisconnected", (playerId) => {
 
 // modify socket handlers to receive initial game state
 socket.on("initGame", (gameState) => {
-  console.log("Received game state:", gameState); // Debug log
   players = gameState.players;
-  trees = gameState.trees || []; // Ensure trees is initialized
+  trees = gameState.trees || [];
   stones = gameState.stones || [];
   myPlayer = players[socket.id];
 });
@@ -104,9 +103,13 @@ function updateRotation() {
 function drawPlayers() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // combine all objects that need Y-sorting
+  // combine all objects that need Y-sorting - fix player ID mapping
   const allObjects = [
-    ...Object.values(players).map((player) => ({ ...player, type: "player" })),
+    ...Object.entries(players).map(([id, player]) => ({
+      ...player,
+      id: id,
+      type: "player",
+    })),
     ...trees
       .filter((tree) => isInViewport(tree))
       .map((tree) => ({ ...tree, type: "tree" })),
@@ -137,6 +140,8 @@ function drawPlayers() {
   if (config.collision.debug) {
     drawCollisionCircles();
   }
+
+  drawChatInput();
 }
 
 function drawPlayer(player) {
@@ -152,6 +157,9 @@ function drawPlayer(player) {
       config.playerRadius * 2
     );
     ctx.restore();
+
+    // draw chat bubble if player has a message
+    drawChatBubble(player);
   }
 }
 
@@ -454,15 +462,104 @@ function drawCollisionCircles() {
   });
 }
 
+let chatMode = false;
+let chatInput = "";
+let playerMessages = {}; // store messages for each player
+
+// chat message handling
+socket.on("playerMessage", (messageData) => {
+  playerMessages[messageData.playerId] = {
+    text: messageData.message,
+    timestamp: Date.now(),
+  };
+});
+
+function drawChatBubble(player) {
+  const message = playerMessages[player.id];
+  if (!message) return;
+
+  // check if message is still valid (not expired)
+  if (Date.now() - message.timestamp > config.chat.bubbleDisplayTime) {
+    delete playerMessages[player.id];
+    return;
+  }
+
+  const bubbleX = player.x - camera.x;
+  const bubbleY = player.y - camera.y - config.playerRadius - 30;
+  const bubbleWidth = Math.max(60, message.text.length * 8);
+  const bubbleHeight = 25;
+
+  // draw bubble background
+  ctx.fillStyle = config.chat.bubbleColor;
+  ctx.fillRect(bubbleX - bubbleWidth / 2, bubbleY, bubbleWidth, bubbleHeight);
+
+  // draw text
+  ctx.fillStyle = config.chat.textColor;
+  ctx.font = "12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(message.text, bubbleX, bubbleY + 16);
+}
+
+function drawChatInput() {
+  if (!chatMode) return;
+
+  // draw chat input box at bottom of screen
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(10, canvas.height - 40, canvas.width - 20, 30);
+
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.textAlign = "left";
+  ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
+}
+
+// event listeners
 window.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    if (!chatMode) {
+      // enter chat mode
+      chatMode = true;
+      chatInput = "";
+    } else {
+      // send message and exit chat mode
+      if (chatInput.trim().length > 0) {
+        const message = chatInput
+          .trim()
+          .substring(0, config.chat.maxMessageLength);
+
+        // show own message immediately
+        playerMessages[socket.id] = {
+          text: message,
+          timestamp: Date.now(),
+        };
+
+        socket.emit("chatMessage", {
+          message: message,
+        });
+      }
+      chatMode = false;
+      chatInput = "";
+    }
+    return;
+  }
+
+  if (chatMode) {
+    if (e.key === "Backspace") {
+      chatInput = chatInput.slice(0, -1);
+    } else if (e.key.length === 1) {
+      chatInput += e.key;
+    }
+    return; // don't process movement keys while chatting
+  }
+
+  // existing movement key handling
   if (keys.hasOwnProperty(e.key.toLowerCase())) {
     keys[e.key.toLowerCase()] = true;
   }
 
-  // debug toggle
+  // add debug toggle
   if (e.key === "p") {
     config.collision.debug = !config.collision.debug;
-    console.log("Debug mode:", config.collision.debug ? "ON" : "OFF");
   }
 });
 
