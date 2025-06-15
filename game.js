@@ -10,6 +10,16 @@ const socket = io(
     : "https://purrpurr-server.onrender.com"
 );
 
+// Use the global gameItems instead of require
+const items = window.gameItems || {};
+
+// Update attack variables
+let lastAttackTime = 0;
+let attackAnimationProgress = 0;
+let isAttacking = false;
+const attackDuration = 250; // Faster animation (reduced from 400ms)
+let autoAttackEnabled = false; // New toggle for auto-attack mode
+
 let players = {};
 let myPlayer = null;
 let trees = [];
@@ -47,6 +57,19 @@ function loadAssets() {
     };
     img.src = config.assets[key];
   });
+
+  const itemAssets = {
+    hammer: items.hammer.asset,
+  };
+  Object.entries(itemAssets).forEach(([key, path]) => {
+    const img = new Image();
+    img.onload = () => {
+      assets[key] = img;
+      assets.loadStatus[key] = true;
+      console.log(`Loaded item asset: ${key}`);
+    };
+    img.src = path;
+  });
 }
 
 socket.on("currentPlayers", (serverPlayers) => {
@@ -54,12 +77,28 @@ socket.on("currentPlayers", (serverPlayers) => {
   myPlayer = players[socket.id];
 });
 
-socket.on("newPlayer", (player) => {
-  players[player.id] = player;
+socket.on("newPlayer", (playerInfo) => {
+  players[playerInfo.id] = {
+    ...playerInfo,
+    inventory: playerInfo.inventory || {
+      slots: Array(config.player.inventory.initialSlots).fill(null),
+      activeSlot: 0,
+    },
+  };
 });
 
 socket.on("playerMoved", (playerInfo) => {
-  players[playerInfo.id] = playerInfo;
+  if (players[playerInfo.id]) {
+    // Preserve and update animation state
+    const player = players[playerInfo.id];
+    players[playerInfo.id] = {
+      ...playerInfo,
+      inventory: playerInfo.inventory || player.inventory,
+      attacking: playerInfo.attacking,
+      attackProgress: playerInfo.attackProgress,
+      attackStartTime: playerInfo.attackStartTime,
+    };
+  }
 });
 
 socket.on("playerDisconnected", (playerId) => {
@@ -121,6 +160,9 @@ function updateRotation() {
 function drawPlayers() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Draw background and grid first
+  drawBackground();
+
   // combine all objects that need Y-sorting - fix player ID mapping
   const allObjects = [
     ...Object.entries(players).map(([id, player]) => ({
@@ -159,6 +201,9 @@ function drawPlayers() {
     drawCollisionCircles();
   }
 
+  // Draw health bars last so they're always on top
+  drawHealthBars();
+  drawInventory(); // Draw inventory before chat for proper layering
   drawChatInput();
 }
 
@@ -166,7 +211,34 @@ function drawPlayer(player) {
   if (assets.player && assets.loadStatus.player) {
     ctx.save();
     ctx.translate(player.x - camera.x, player.y - camera.y);
-    ctx.rotate(player.rotation || 0);
+
+    let baseRotation = player.rotation || 0;
+
+    if (player.attacking && player.attackProgress !== undefined) {
+      const maxSwingAngle = (70 * Math.PI) / 180;
+      let swingAngle = 0;
+
+      if (player.attackProgress < 0.5) {
+        swingAngle = -(player.attackProgress / 0.5) * maxSwingAngle;
+      } else {
+        swingAngle =
+          -maxSwingAngle +
+          ((player.attackProgress - 0.5) / 0.5) * maxSwingAngle;
+      }
+      baseRotation += swingAngle;
+    }
+
+    ctx.rotate(baseRotation);
+
+    // Draw equipped item for all players if they have inventory
+    if (player.inventory && player.inventory.slots) {
+      const activeItem = player.inventory.slots[player.inventory.activeSlot];
+      if (activeItem && assets[activeItem.id]) {
+        drawEquippedItem(activeItem, player);
+      }
+    }
+
+    // Draw player sprite
     ctx.drawImage(
       assets.player,
       -config.playerRadius,
@@ -174,11 +246,147 @@ function drawPlayer(player) {
       config.playerRadius * 2,
       config.playerRadius * 2
     );
-    ctx.restore();
 
-    // draw chat bubble if player has a message
+    ctx.restore();
     drawChatBubble(player);
   }
+}
+
+// New function to draw equipped items - will handle different types
+function drawEquippedItem(item, player) {
+  ctx.save();
+
+  // Get rendering settings for this item type
+  const renderInfo = getItemRenderInfo(item, player);
+
+  // Apply position and rotation
+  ctx.rotate(renderInfo.rotation);
+
+  // Draw the item with proper scale
+  ctx.drawImage(
+    assets[item.id],
+    renderInfo.x,
+    renderInfo.y,
+    renderInfo.width,
+    renderInfo.height
+  );
+
+  ctx.restore();
+}
+
+// Modify getItemRenderInfo to not add swing animation to item since body is now swinging
+function getItemRenderInfo(item, player) {
+  // Use item-specific render options or defaults
+  const renderOpts = item.renderOptions || {};
+
+  // Get scale - either from item config or use default
+  const scaleMultiplier = renderOpts.scale || 1.2;
+  const scale = config.playerRadius * scaleMultiplier;
+
+  // Get position offsets - either from item config or use defaults
+  const offsetXMultiplier =
+    renderOpts.offsetX !== undefined ? renderOpts.offsetX : 0.9;
+  const offsetYMultiplier =
+    renderOpts.offsetY !== undefined ? renderOpts.offsetY : -0.25;
+
+  const offsetX = config.playerRadius * offsetXMultiplier;
+  const offsetY = scale * offsetYMultiplier;
+
+  // Base settings that apply to most items
+  const info = {
+    x: offsetX,
+    y: offsetY,
+    width: scale,
+    height: scale,
+    rotation: Math.PI / 2, // horizontal by default
+  };
+
+  // Customize based on item type
+  switch (item.id) {
+    case "hammer":
+      // No additional rotation for hammer since the entire body rotates now
+      break;
+
+    // Add more cases for future items here
+    // case "sword":
+    //   info.x = ...
+    //   break;
+
+    // Default rendering for unknown items
+    default:
+      break;
+  }
+
+  return info;
+}
+
+// Update the health update handler
+socket.on("playerHealthUpdate", (data) => {
+  const player = players[data.playerId];
+  if (!player) return;
+
+  // Update player health with validation
+  player.health = Math.max(0, Math.min(data.health, data.maxHealth));
+  player.lastHealthUpdate = data.timestamp;
+
+  // If this is our player, update local state
+  if (data.playerId === socket.id && myPlayer) {
+    myPlayer.health = player.health;
+    if (myPlayer.health < data.health) {
+      showDamageEffect();
+    }
+  }
+});
+
+// Update drawHealthBars function for better visibility
+function drawHealthBars() {
+  Object.values(players).forEach((player) => {
+    // Skip if player doesn't have health
+    if (typeof player.health === "undefined") return;
+
+    const healthBarY = player.y - camera.y + config.player.health.barOffset;
+    const healthBarX = player.x - camera.x - config.player.health.barWidth / 2;
+    const healthPercent = player.health / config.player.health.max;
+    const barHeight = config.player.health.barHeight;
+    const radius = barHeight / 2;
+
+    // Draw background
+    ctx.beginPath();
+    ctx.fillStyle = config.colors.healthBar.background;
+    ctx.roundRect(
+      healthBarX,
+      healthBarY,
+      config.player.health.barWidth,
+      barHeight,
+      radius
+    );
+    ctx.fill();
+
+    // Draw health fill
+    ctx.beginPath();
+    ctx.fillStyle = config.colors.healthBar.fill;
+    ctx.roundRect(
+      healthBarX,
+      healthBarY,
+      config.player.health.barWidth * healthPercent,
+      barHeight,
+      radius
+    );
+    ctx.fill();
+
+    // Draw border
+    ctx.beginPath();
+    ctx.strokeStyle = config.colors.healthBar.border;
+    ctx.lineWidth = config.colors.healthBar.borderWidth;
+    ctx.roundRect(
+      healthBarX,
+      healthBarY,
+      config.player.health.barWidth,
+      barHeight,
+      radius
+    );
+    ctx.stroke();
+  });
 }
 
 function drawTree(tree) {
@@ -344,6 +552,19 @@ function resolvePlayerCollisions() {
 function updatePosition() {
   if (!myPlayer) return;
 
+  // Handle position correction from server
+  if (needsPositionReconciliation && correctedPosition) {
+    myPlayer.x = correctedPosition.x;
+    myPlayer.y = correctedPosition.y;
+    myPlayer.rotation = correctedPosition.rotation;
+    needsPositionReconciliation = false;
+    correctedPosition = null;
+    return; // Skip normal movement this frame
+  }
+
+  // Don't allow movement if dead
+  if (myPlayer.isDead) return;
+
   let dx = 0;
   let dy = 0;
 
@@ -478,7 +699,78 @@ function drawCollisionCircles() {
       ctx.stroke();
     }
   });
+
+  // Draw weapon hitboxes if enabled
+  if (config.collision.weaponDebug) {
+    Object.values(players).forEach((player) => {
+      if (player.inventory && player.inventory.slots) {
+        const activeItem = player.inventory.slots[player.inventory.activeSlot];
+
+        if (activeItem && activeItem.id === "hammer") {
+          // Calculate weapon range around player based on facing direction
+          const weaponRange = items.hammer.range || 120;
+
+          // Get player's facing angle
+          const playerAngle = player.rotation + Math.PI / 2;
+
+          // Calculate the center of the weapon hitbox in front of player
+          const hitboxX = player.x + Math.cos(playerAngle) * (weaponRange / 2);
+          const hitboxY = player.y + Math.sin(playerAngle) * (weaponRange / 2);
+
+          // Draw weapon hitbox
+          ctx.fillStyle = config.collision.weaponDebugColor;
+
+          // Draw arc showing attack range and angle
+          ctx.beginPath();
+          // 120 degree arc in front (PI/3 on each side)
+          const startAngle = playerAngle - Math.PI / 3;
+          const endAngle = playerAngle + Math.PI / 3;
+          ctx.moveTo(player.x - camera.x, player.y - camera.y);
+          ctx.arc(
+            player.x - camera.x,
+            player.y - camera.y,
+            weaponRange,
+            startAngle,
+            endAngle
+          );
+          ctx.closePath();
+          ctx.fill();
+
+          // Draw outline
+          ctx.strokeStyle = "rgba(255, 255, 0, 0.8)";
+          ctx.stroke();
+
+          // If attacking, highlight the active area
+          if (player.attacking) {
+            ctx.fillStyle = "rgba(255, 100, 0, 0.4)";
+            ctx.beginPath();
+            ctx.arc(
+              player.x - camera.x,
+              player.y - camera.y,
+              weaponRange,
+              startAngle,
+              endAngle
+            );
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+    });
+  }
 }
+
+// Add a keyboard shortcut to toggle weapon debug
+window.addEventListener("keydown", (e) => {
+  // ...existing code...
+
+  // Add debug toggle for weapon collision
+  if (e.key.toLowerCase() === "o") {
+    config.collision.weaponDebug = !config.collision.weaponDebug;
+  }
+
+  // ...existing code...
+});
 
 let chatMode = false;
 let chatInput = "";
@@ -531,7 +823,175 @@ function drawChatInput() {
   ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
 }
 
-// event listeners
+// Initialize empty inventory slots
+function initInventory() {
+  if (!myPlayer.inventory) {
+    myPlayer.inventory = new window.InventorySystem(
+      config.player.inventory.initialSlots
+    );
+    // Add hammer to first slot
+    myPlayer.inventory.addItem(items.hammer, 0);
+    myPlayer.inventory.selectSlot(0);
+  }
+}
+
+// Draw the inventory UI
+function drawInventory() {
+  if (!config.player.inventory.enabled || !myPlayer?.inventory) return;
+
+  const inv = config.player.inventory;
+  const slotSize = inv.displayUI.slotSize;
+  const padding = inv.displayUI.padding;
+  const startX = (canvas.width - (slotSize + padding) * inv.currentSlots) / 2;
+  const startY = canvas.height - slotSize - inv.displayUI.bottomOffset;
+
+  myPlayer.inventory.slots.forEach((item, i) => {
+    const x = startX + i * (slotSize + padding);
+    const y = startY;
+    const isSelected = i === myPlayer.inventory.activeSlot;
+
+    // Draw slot background
+    ctx.fillStyle = inv.displayUI.backgroundColor;
+    ctx.strokeStyle = isSelected
+      ? inv.displayUI.selectedBorderColor
+      : inv.displayUI.borderColor;
+    ctx.lineWidth = inv.displayUI.borderWidth;
+
+    ctx.beginPath();
+    ctx.roundRect(x, y, slotSize, slotSize, inv.displayUI.cornerRadius);
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw item if exists
+    if (item && assets[item.id]) {
+      ctx.drawImage(
+        assets[item.id],
+        x + 5,
+        y + 5,
+        slotSize - 10,
+        slotSize - 10
+      );
+    }
+  });
+}
+
+// Handle inventory slot selection
+function handleInventorySelection(index) {
+  if (!myPlayer?.inventory) return;
+
+  const success = myPlayer.inventory.selectSlot(index);
+  if (success) {
+    socket.emit("inventorySelect", { slot: index });
+  }
+}
+
+// Modify this function to handle auto-attacking
+function gameLoop() {
+  // Initialize inventory if needed
+  if (myPlayer && !myPlayer.inventory) {
+    initInventory();
+  }
+
+  // Update attack animation
+  if (isAttacking && myPlayer) {
+    const now = Date.now();
+    const elapsed = now - lastAttackTime;
+
+    if (elapsed <= attackDuration) {
+      // Update animation progress
+      attackAnimationProgress = elapsed / attackDuration;
+      myPlayer.attackProgress = attackAnimationProgress;
+    } else {
+      // End attack animation
+      isAttacking = false;
+      myPlayer.attacking = false;
+      myPlayer.attackProgress = 0;
+
+      // If auto-attack is enabled, queue next attack after cooldown
+      if (autoAttackEnabled) {
+        const cooldownRemaining =
+          (items.hammer.cooldown || 800) - attackDuration;
+        if (cooldownRemaining > 0) {
+          setTimeout(startAttack, cooldownRemaining);
+        } else {
+          startAttack();
+        }
+      }
+    }
+  }
+
+  // Update attack animations for all players
+  Object.values(players).forEach((player) => {
+    if (player.attacking && player.attackStartTime) {
+      const now = Date.now();
+      const elapsed = now - player.attackStartTime;
+
+      if (elapsed <= attackDuration) {
+        player.attackProgress = elapsed / attackDuration;
+      } else {
+        player.attacking = false;
+        player.attackProgress = 0;
+      }
+    }
+  });
+
+  updatePosition();
+  updateRotation();
+  updateCamera();
+  drawPlayers();
+  requestAnimationFrame(gameLoop);
+}
+
+// Toggle auto attack function
+function toggleAutoAttack() {
+  autoAttackEnabled = !autoAttackEnabled;
+
+  if (autoAttackEnabled) {
+    // Start attacking immediately when enabled
+    startAttack();
+
+    // Visual feedback that auto-attack is on
+    const feedbackEl = document.createElement("div");
+    feedbackEl.id = "auto-attack-indicator";
+    feedbackEl.textContent = "Auto-Attack ON";
+    feedbackEl.style.position = "absolute";
+    feedbackEl.style.top = "10px";
+    feedbackEl.style.right = "10px";
+    feedbackEl.style.backgroundColor = "rgba(255, 0, 0, 0.7)";
+    feedbackEl.style.color = "white";
+    feedbackEl.style.padding = "5px 10px";
+    feedbackEl.style.borderRadius = "5px";
+    feedbackEl.style.fontWeight = "bold";
+    document.body.appendChild(feedbackEl);
+  } else {
+    // Remove indicator when disabled
+    const indicator = document.getElementById("auto-attack-indicator");
+    if (indicator) document.body.removeChild(indicator);
+  }
+}
+
+// Start attack function
+function startAttack() {
+  const now = Date.now();
+
+  // Check if we can attack (not in cooldown)
+  if (now - lastAttackTime > (items.hammer.cooldown || 800)) {
+    isAttacking = true;
+    lastAttackTime = now;
+    attackAnimationProgress = 0;
+
+    // Tell server about attack
+    socket.emit("attackStart");
+
+    // Local animation update
+    if (myPlayer) {
+      myPlayer.attacking = true;
+      myPlayer.attackProgress = 0;
+    }
+  }
+}
+
+// Add to event listeners section for number keys 1-5
 window.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     if (!chatMode) {
@@ -579,6 +1039,20 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "p") {
     config.collision.debug = !config.collision.debug;
   }
+
+  // Number keys for inventory selection (1-5 initially)
+  const keyNum = parseInt(e.key);
+  if (
+    !isNaN(keyNum) &&
+    keyNum >= 1 &&
+    keyNum <= config.player.inventory.currentSlots
+  ) {
+    handleInventorySelection(keyNum - 1); // Convert to 0-based index
+  }
+
+  if (e.key.toLowerCase() === "e" && !chatMode) {
+    toggleAutoAttack();
+  }
 });
 
 window.addEventListener("keyup", (e) => {
@@ -592,14 +1066,273 @@ window.addEventListener("mousemove", (e) => {
   mouse.y = e.clientY;
 });
 
-function gameLoop() {
-  updatePosition();
-  updateRotation();
-  updateCamera();
-  drawPlayers();
-  requestAnimationFrame(gameLoop);
+// Function to expand inventory (for future use)
+function expandInventory() {
+  const inv = config.player.inventory;
+  if (inv.currentSlots < inv.maxSlots) {
+    inv.currentSlots++;
+
+    // If player has inventory initialized, add a new slot
+    if (myPlayer && myPlayer.inventory) {
+      myPlayer.inventory.slots.push(null);
+    }
+
+    // Could emit event to server to sync inventory size
+    // socket.emit("inventoryExpand");
+
+    return true;
+  }
+  return false;
+}
+
+// Add this function to draw background and grid
+function drawBackground() {
+  // Fill background with light green
+  ctx.fillStyle = config.colors.background;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw grid if enabled
+  if (config.colors.grid && config.colors.grid.enabled) {
+    const gridSize = config.colors.grid.size;
+    const startX = Math.floor(-camera.x % gridSize);
+    const startY = Math.floor(-camera.y % gridSize);
+    const endX = canvas.width;
+    const endY = canvas.height;
+
+    ctx.strokeStyle = config.colors.grid.lineColor;
+    ctx.lineWidth = config.colors.grid.lineWidth || 1;
+    ctx.beginPath();
+
+    // Draw vertical lines
+    for (let x = startX; x < endX; x += gridSize) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, endY);
+    }
+
+    // Draw horizontal lines
+    for (let y = startY; y < endY; y += gridSize) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(endX, y);
+    }
+
+    ctx.stroke();
+  }
 }
 
 loadAssets();
 
 gameLoop();
+
+// Add mouse click handler for attacks
+window.addEventListener("mousedown", (e) => {
+  if (e.button === 0 && !chatMode) {
+    // Left click and not in chat
+    startAttack();
+  }
+});
+
+// Add socket listeners for attack events
+socket.on("playerAttackStart", (data) => {
+  if (players[data.id]) {
+    players[data.id].attacking = true;
+    players[data.id].attackStartTime = data.startTime;
+    players[data.id].attackProgress = 0;
+  }
+});
+
+socket.on("playerAttackEnd", (data) => {
+  if (players[data.id]) {
+    players[data.id].attacking = false;
+  }
+});
+
+// Listen for damage events
+socket.on("playerDamaged", (data) => {
+  if (players[data.playerId]) {
+    players[data.playerId].health = data.health;
+
+    // Optional: Add visual feedback for player taking damage
+    if (data.playerId === socket.id) {
+      // Player took damage, flash screen red
+      const damageOverlay = document.createElement("div");
+      damageOverlay.style.position = "absolute";
+      damageOverlay.style.top = "0";
+      damageOverlay.style.left = "0";
+      damageOverlay.style.width = "100%";
+      damageOverlay.style.height = "100%";
+      damageOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
+      damageOverlay.style.pointerEvents = "none";
+      damageOverlay.style.zIndex = "1000";
+      document.body.appendChild(damageOverlay);
+
+      // Remove after a short duration
+      setTimeout(() => {
+        document.body.removeChild(damageOverlay);
+      }, 100);
+    }
+  }
+});
+
+// Add variables to track sync state
+let lastServerSync = Date.now();
+let needsPositionReconciliation = false;
+let correctedPosition = null;
+
+// Add improved socket handlers for synchronization
+socket.on("playerHealthUpdate", (data) => {
+  const player = players[data.playerId];
+  if (!player) return;
+
+  // Update player health with validation
+  player.health = Math.max(0, Math.min(data.health, data.maxHealth));
+  player.lastHealthUpdate = data.timestamp;
+
+  // If this is our player, update local state
+  if (data.playerId === socket.id && myPlayer) {
+    myPlayer.health = player.health;
+    if (myPlayer.health < data.health) {
+      showDamageEffect();
+    }
+  }
+});
+
+// Add handler for death events
+socket.on("playerDied", (data) => {
+  if (players[data.playerId]) {
+    players[data.playerId].health = 0;
+    players[data.playerId].isDead = true;
+
+    // If local player died, show death screen
+    if (data.playerId === socket.id && myPlayer) {
+      myPlayer.health = 0;
+      myPlayer.isDead = true;
+      showDeathScreen();
+    }
+  }
+});
+
+// Add handler for respawn events
+socket.on("playerRespawned", (data) => {
+  if (players[data.playerId]) {
+    players[data.playerId].x = data.x;
+    players[data.playerId].y = data.y;
+    players[data.playerId].health = data.health;
+    players[data.playerId].isDead = false;
+
+    // If local player respawned, update local state
+    if (data.playerId === socket.id) {
+      myPlayer.x = data.x;
+      myPlayer.y = data.y;
+      myPlayer.health = data.health;
+      myPlayer.isDead = false;
+      hideDeathScreen();
+    }
+  }
+});
+
+// Add handler for position correction from server
+socket.on("positionCorrection", (correctPos) => {
+  if (myPlayer) {
+    // Set flag to reconcile position on next frame
+    needsPositionReconciliation = true;
+    correctedPosition = correctPos;
+  }
+});
+
+// Add handler for full state sync
+socket.on("fullStateSync", (data) => {
+  // Update all player data, preserving local animations
+  Object.entries(data.players).forEach(([id, serverPlayer]) => {
+    if (players[id]) {
+      // Keep local animation state
+      const attackState = players[id].attacking;
+      const attackProgress = players[id].attackProgress;
+
+      // Update with server data
+      players[id] = {
+        ...serverPlayer,
+        // Preserve animation state
+        attacking: attackState,
+        attackProgress: attackProgress,
+      };
+    } else {
+      // New player
+      players[id] = serverPlayer;
+    }
+  });
+
+  // Update our reference to myPlayer
+  myPlayer = players[socket.id];
+  lastServerSync = Date.now();
+});
+
+// Visual feedback for damage
+function showDamageEffect() {
+  const overlay = document.createElement("div");
+  overlay.style.position = "fixed";
+  overlay.style.top = 0;
+  overlay.style.left = 0;
+  overlay.style.width = "100%";
+  overlay.style.height = "100%";
+  overlay.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
+  overlay.style.pointerEvents = "none";
+  overlay.style.zIndex = 1000;
+  document.body.appendChild(overlay);
+
+  setTimeout(() => {
+    document.body.removeChild(overlay);
+  }, 200);
+}
+
+// Death screen
+function showDeathScreen() {
+  const deathScreen = document.createElement("div");
+  deathScreen.id = "death-screen";
+  deathScreen.style.position = "fixed";
+  deathScreen.style.top = 0;
+  deathScreen.style.left = 0;
+  deathScreen.style.width = "100%";
+  deathScreen.style.height = "100%";
+  deathScreen.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+  deathScreen.style.color = "white";
+  deathScreen.style.display = "flex";
+  deathScreen.style.justifyContent = "center";
+  deathScreen.style.alignItems = "center";
+  deathScreen.style.fontSize = "32px";
+  deathScreen.style.zIndex = 1001;
+  deathScreen.innerHTML = "<div>You died! Respawning...</div>";
+  document.body.appendChild(deathScreen);
+}
+
+function hideDeathScreen() {
+  const deathScreen = document.getElementById("death-screen");
+  if (deathScreen) {
+    document.body.removeChild(deathScreen);
+  }
+}
+// Death screen
+function showDeathScreen() {
+  const deathScreen = document.createElement("div");
+  deathScreen.id = "death-screen";
+  deathScreen.style.position = "fixed";
+  deathScreen.style.top = 0;
+  deathScreen.style.left = 0;
+  deathScreen.style.width = "100%";
+  deathScreen.style.height = "100%";
+  deathScreen.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+  deathScreen.style.color = "white";
+  deathScreen.style.display = "flex";
+  deathScreen.style.justifyContent = "center";
+  deathScreen.style.alignItems = "center";
+  deathScreen.style.fontSize = "32px";
+  deathScreen.style.zIndex = 1001;
+  deathScreen.innerHTML = "<div>You died! Respawning...</div>";
+  document.body.appendChild(deathScreen);
+}
+
+function hideDeathScreen() {
+  const deathScreen = document.getElementById("death-screen");
+  if (deathScreen) {
+    document.body.removeChild(deathScreen);
+  }
+}

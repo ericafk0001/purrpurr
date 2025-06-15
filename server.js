@@ -4,6 +4,8 @@ const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
 const config = require("./config.js");
+const items = require("./items.js");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
@@ -26,6 +28,89 @@ config.trees.count = Math.floor(
 const players = {};
 const trees = [];
 const stones = [];
+
+// Health system utility functions
+function damagePlayer(playerId, amount) {
+  const player = players[playerId];
+  if (!player) return false;
+
+  const oldHealth = player.health;
+  player.health = Math.max(0, player.health - amount);
+  player.lastDamageTime = Date.now();
+
+  // Broadcast health update
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+  });
+
+  if (player.health <= 0 && oldHealth > 0) {
+    handlePlayerDeath(playerId);
+  }
+
+  return true;
+}
+
+function healPlayer(playerId, amount) {
+  const player = players[playerId];
+  if (!player) return false;
+
+  player.health = Math.min(config.player.health.max, player.health + amount);
+
+  // Broadcast health update
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+  });
+
+  return true;
+}
+
+// Enhanced player death handling
+function handlePlayerDeath(playerId) {
+  const player = players[playerId];
+  if (!player) return;
+
+  // Set player state to dead
+  player.isDead = true;
+  player.health = 0;
+  player.isRespawning = true;
+
+  // Emit death event with complete player state
+  io.emit("playerDied", {
+    playerId,
+    position: { x: player.x, y: player.y },
+    health: 0,
+  });
+
+  // Respawn player with full health after delay
+  setTimeout(() => {
+    const player = players[playerId];
+    if (player && player.isRespawning) {
+      const spawnPoint = findSafeSpawnPoint();
+      player.x = spawnPoint.x;
+      player.y = spawnPoint.y;
+      player.health = config.player.health.max;
+      player.lastDamageTime = null;
+      player.isDead = false;
+      player.isRespawning = false;
+
+      // Notify all clients about respawn with complete state
+      io.emit("playerRespawned", {
+        playerId,
+        x: player.x,
+        y: player.y,
+        health: player.health,
+        maxHealth: config.player.health.max,
+        inventory: player.inventory,
+      });
+    }
+  }, 3000); // 3 second respawn delay
+}
 
 function generateTrees() {
   const cellSize = config.trees.minDistance;
@@ -221,35 +306,114 @@ function isPositionSafe(x, y) {
   return true;
 }
 
+let lastModified = Date.now();
+
+// Watch relevant directories for changes
+const watchDirs = [__dirname];
+watchDirs.forEach((dir) => {
+  fs.watch(dir, (eventType, filename) => {
+    if (filename && !filename.includes("node_modules")) {
+      lastModified = Date.now();
+    }
+  });
+});
+
+// Add endpoint to check last modified time
+app.get("/last-modified", (req, res) => {
+  res.json(lastModified);
+});
+
 generateTrees();
 generateStones();
 
 io.on("connection", (socket) => {
   console.log("A player connected:", socket.id);
   const spawnPoint = findSafeSpawnPoint();
-  players[socket.id] = { x: spawnPoint.x, y: spawnPoint.y, rotation: 0 };
 
-  // send both players and trees data to new player
-  socket.emit("initGame", { players, trees, stones });
+  // Initialize player with health and hammer
+  players[socket.id] = {
+    x: spawnPoint.x,
+    y: spawnPoint.y,
+    rotation: 0,
+    health: config.player.health.max,
+    lastDamageTime: null,
+    lastAttackTime: null,
+    inventory: {
+      slots: Array(config.player.inventory.initialSlots).fill(null),
+      activeSlot: 0,
+      selectedItem: null, // Add this to track currently selected item
+    },
+    attacking: false,
+  };
 
-  socket.broadcast.emit("newPlayer", { id: socket.id, x: 100, y: 100 });
+  // Add hammer to first slot with complete item data
+  players[socket.id].inventory.slots[0] = {
+    ...items.hammer,
+    slot: 0,
+    selected: true,
+  };
+  players[socket.id].inventory.selectedItem =
+    players[socket.id].inventory.slots[0];
+
+  // Send both players and trees data to new player
+  socket.emit("initGame", {
+    players: Object.entries(players).reduce((acc, [id, player]) => {
+      acc[id] = {
+        ...player,
+        health: player.health,
+        maxHealth: config.player.health.max,
+      };
+      return acc;
+    }, {}),
+    trees,
+    stones,
+  });
+
+  // Notify other players about new player with health info
+  socket.broadcast.emit("newPlayer", {
+    id: socket.id,
+    x: spawnPoint.x,
+    y: spawnPoint.y,
+    health: config.player.health.max,
+    maxHealth: config.player.health.max,
+    inventory: players[socket.id].inventory,
+  });
 
   socket.on("playerMovement", (movement) => {
     const player = players[socket.id];
-    if (player) {
-      // validate movement isn't too extreme
+    if (player && !player.isDead) {
+      // Validate movement isn't too extreme
       const maxSpeed = config.moveSpeed * 1.5;
       const dx = movement.x - player.x;
       const dy = movement.y - player.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance <= maxSpeed) {
+        // Update player position
         player.x = movement.x;
         player.y = movement.y;
         player.rotation = movement.rotation;
 
+        // Validate position is within world bounds
+        player.x = Math.max(0, Math.min(config.worldWidth, player.x));
+        player.y = Math.max(0, Math.min(config.worldHeight, player.y));
+
+        // Broadcast position update with health info
         socket.broadcast.emit("playerMoved", {
           id: socket.id,
+          x: player.x,
+          y: player.y,
+          rotation: player.rotation,
+          inventory: player.inventory,
+          attacking: player.attacking,
+          attackProgress: player.attackProgress,
+          attackStartTime: player.attackStartTime,
+          health: player.health,
+          maxHealth: config.player.health.max,
+        });
+      } else {
+        // Position appears invalid - force sync correct position to client
+        socket.emit("positionCorrection", {
           x: player.x,
           y: player.y,
           rotation: player.rotation,
@@ -267,6 +431,167 @@ io.on("connection", (socket) => {
       });
     }
   });
+
+  // Handle damage request (player attacking another player)
+  socket.on("attackPlayer", (targetId) => {
+    // Simple implementation - can be expanded with weapons, attack range, etc.
+    const attacker = players[socket.id];
+    const target = players[targetId];
+
+    if (attacker && target) {
+      // Check if players are close enough for attack
+      const dx = attacker.x - target.x;
+      const dy = attacker.y - target.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Arbitrary attack range - can be moved to config
+      const attackRange = 100;
+
+      if (distance <= attackRange) {
+        // Arbitrary damage amount - can be moved to config
+        damagePlayer(targetId, 10);
+
+        // Notify about attack
+        io.emit("playerAttacked", {
+          attackerId: socket.id,
+          targetId: targetId,
+        });
+      }
+    }
+  });
+
+  // Handle heal request (consuming items, etc)
+  socket.on("healRequest", (amount) => {
+    if (amount && amount > 0) {
+      healPlayer(socket.id, amount);
+    }
+  });
+
+  // Handle inventory selection syncing
+  socket.on("inventorySelect", (data) => {
+    const player = players[socket.id];
+    if (player && typeof data.slot === "number") {
+      // Deselect currently selected item if any
+      player.inventory.slots.forEach((item) => {
+        if (item) item.selected = false;
+      });
+
+      // Select new item if slot has one
+      const selectedItem = player.inventory.slots[data.slot];
+      if (selectedItem) {
+        selectedItem.selected = true;
+        player.inventory.selectedItem = selectedItem;
+      } else {
+        player.inventory.selectedItem = null;
+      }
+
+      player.inventory.activeSlot = data.slot;
+
+      // Broadcast inventory update to all clients
+      io.emit("playerInventoryUpdate", {
+        id: socket.id,
+        inventory: player.inventory,
+      });
+    }
+  });
+
+  // Handle inventory expansion
+  socket.on("inventoryExpand", () => {
+    if (
+      players[socket.id] &&
+      players[socket.id].inventory.slots.length <
+        config.player.inventory.maxSlots
+    ) {
+      players[socket.id].inventory.slots.push(null);
+      io.emit("playerInventoryExpand", {
+        id: socket.id,
+        newSize: players[socket.id].inventory.slots.length,
+      });
+    }
+  });
+
+  // Update attack handler
+  socket.on("attackStart", () => {
+    const player = players[socket.id];
+    if (!player || player.isDead) return;
+
+    const now = Date.now();
+    if (
+      player.lastAttackTime &&
+      now - player.lastAttackTime < items.hammer.cooldown
+    ) {
+      return;
+    }
+
+    player.attacking = true;
+    player.attackStartTime = now;
+    player.lastAttackTime = now;
+    player.attackProgress = 0;
+
+    // Broadcast attack start with timing info
+    io.emit("playerAttackStart", {
+      id: socket.id,
+      startTime: now,
+    });
+
+    // Process the attack after a slight delay (for animation)
+    setTimeout(() => {
+      processAttack(socket.id);
+
+      // End attack state
+      player.attacking = false;
+      io.emit("playerAttackEnd", { id: socket.id });
+    }, items.hammer.useTime);
+  });
+
+  // New function to process attacks and damage
+  function processAttack(attackerId) {
+    const attacker = players[attackerId];
+    if (!attacker) return;
+
+    // Get the equipped item
+    const activeSlot = attacker.inventory.activeSlot;
+    const weapon = attacker.inventory.slots[activeSlot];
+
+    if (!weapon || weapon.id !== "hammer") return;
+
+    const attackRange = weapon.range || 100;
+    const attackDamage = weapon.damage || 15;
+
+    // Check for players in range
+    Object.entries(players).forEach(([targetId, target]) => {
+      // Don't damage self
+      if (targetId === attackerId) return;
+
+      // Calculate distance
+      const dx = target.x - attacker.x;
+      const dy = target.y - attacker.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Check if target is in range and in front of attacker
+      if (distance <= attackRange) {
+        // Calculate angle to target relative to attacker's facing direction
+        const angleToTarget = Math.atan2(dy, dx);
+        const attackerFacing = attacker.rotation + Math.PI / 2; // Adjust for rotation offset
+
+        // Calculate angle difference
+        let angleDiff = Math.abs(angleToTarget - attackerFacing);
+        angleDiff = angleDiff > Math.PI ? Math.PI * 2 - angleDiff : angleDiff;
+
+        // Check if target is in front (120 degree arc)
+        if (angleDiff < Math.PI / 1.5) {
+          damagePlayer(targetId, attackDamage);
+
+          // Notify about the hit
+          io.emit("playerHit", {
+            attackerId: attackerId,
+            targetId: targetId,
+            damage: attackDamage,
+          });
+        }
+      }
+    });
+  }
 
   socket.on("disconnect", () => {
     console.log("Player disconnected:", socket.id);
