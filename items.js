@@ -34,7 +34,7 @@ const gameItems = {
       rotationOffset: 0,
     },
     useEffect: {
-      cooldown: 10,
+      cooldown: 100,
     },
   },
 };
