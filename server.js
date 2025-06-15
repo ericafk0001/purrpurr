@@ -330,7 +330,7 @@ io.on("connection", (socket) => {
   console.log("A player connected:", socket.id);
   const spawnPoint = findSafeSpawnPoint();
 
-  // Initialize player with health and hammer
+  // Initialize player with health and inventory
   players[socket.id] = {
     x: spawnPoint.x,
     y: spawnPoint.y,
@@ -341,19 +341,23 @@ io.on("connection", (socket) => {
     inventory: {
       slots: Array(config.player.inventory.initialSlots).fill(null),
       activeSlot: 0,
-      selectedItem: null, // Add this to track currently selected item
     },
     attacking: false,
   };
 
-  // Add hammer to first slot with complete item data
-  players[socket.id].inventory.slots[0] = {
-    ...items.hammer,
-    slot: 0,
-    selected: true,
-  };
-  players[socket.id].inventory.selectedItem =
-    players[socket.id].inventory.slots[0];
+  // Give starting items
+  const startingItems = [
+    { ...items.hammer, slot: 0 },
+    { ...items.hammer, slot: 1 },
+    { ...items.hammer, slot: 2 },
+  ];
+
+  startingItems.forEach((item) => {
+    players[socket.id].inventory.slots[item.slot] = item;
+  });
+
+  // Set initial active item
+  players[socket.id].inventory.selectedItem = players[socket.id].inventory.slots[0];
 
   // Send both players and trees data to new player
   socket.emit("initGame", {
@@ -429,34 +433,6 @@ io.on("connection", (socket) => {
         playerId: socket.id,
         message: data.message,
       });
-    }
-  });
-
-  // Handle damage request (player attacking another player)
-  socket.on("attackPlayer", (targetId) => {
-    // Simple implementation - can be expanded with weapons, attack range, etc.
-    const attacker = players[socket.id];
-    const target = players[targetId];
-
-    if (attacker && target) {
-      // Check if players are close enough for attack
-      const dx = attacker.x - target.x;
-      const dy = attacker.y - target.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // Arbitrary attack range - can be moved to config
-      const attackRange = 100;
-
-      if (distance <= attackRange) {
-        // Arbitrary damage amount - can be moved to config
-        damagePlayer(targetId, 10);
-
-        // Notify about attack
-        io.emit("playerAttacked", {
-          attackerId: socket.id,
-          targetId: targetId,
-        });
-      }
     }
   });
 
@@ -549,44 +525,70 @@ io.on("connection", (socket) => {
     const attacker = players[attackerId];
     if (!attacker) return;
 
-    // Get the equipped item
     const activeSlot = attacker.inventory.activeSlot;
     const weapon = attacker.inventory.slots[activeSlot];
 
     if (!weapon || weapon.id !== "hammer") return;
 
-    const attackRange = weapon.range || 100;
-    const attackDamage = weapon.damage || 15;
+    const attackRange = weapon.range || 120;
+    const arcAngle = Math.PI / 1.5; // 120 degrees
 
-    // Check for players in range
+    // Calculate attack angle
+    const playerAngle = attacker.rotation + Math.PI / 2;
+    const startAngle = playerAngle - arcAngle / 2;
+    const endAngle = playerAngle + arcAngle / 2;
+
     Object.entries(players).forEach(([targetId, target]) => {
-      // Don't damage self
       if (targetId === attackerId) return;
 
-      // Calculate distance
+      // Get closest point on target's circle to attacker
       const dx = target.x - attacker.x;
       const dy = target.y - attacker.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Check if target is in range and in front of attacker
-      if (distance <= attackRange) {
-        // Calculate angle to target relative to attacker's facing direction
-        const angleToTarget = Math.atan2(dy, dx);
-        const attackerFacing = attacker.rotation + Math.PI / 2; // Adjust for rotation offset
+      // Account for player radius in range check
+      const effectiveRange = attackRange + config.collision.sizes.player;
+      
+      if (distance <= effectiveRange) {
+        // Check multiple points around target's collision circle
+        const numPoints = 8; // Check 8 points around the circle
+        let inArc = false;
 
-        // Calculate angle difference
-        let angleDiff = Math.abs(angleToTarget - attackerFacing);
-        angleDiff = angleDiff > Math.PI ? Math.PI * 2 - angleDiff : angleDiff;
+        for (let i = 0; i < numPoints; i++) {
+          const angle = (i / numPoints) * Math.PI * 2;
+          const pointX = target.x + Math.cos(angle) * config.collision.sizes.player;
+          const pointY = target.y + Math.sin(angle) * config.collision.sizes.player;
+          
+          // Calculate angle to this point
+          const pointDx = pointX - attacker.x;
+          const pointDy = pointY - attacker.y;
+          const angleToPoint = Math.atan2(pointDy, pointDx);
+          
+          // Normalize angles
+          const normalizedPointAngle = (angleToPoint + Math.PI * 2) % (Math.PI * 2);
+          const normalizedStartAngle = (startAngle + Math.PI * 2) % (Math.PI * 2);
+          const normalizedEndAngle = (endAngle + Math.PI * 2) % (Math.PI * 2);
 
-        // Check if target is in front (120 degree arc)
-        if (angleDiff < Math.PI / 1.5) {
-          damagePlayer(targetId, attackDamage);
+          // Check if point is within arc
+          if (normalizedStartAngle <= normalizedEndAngle) {
+            if (normalizedPointAngle >= normalizedStartAngle && normalizedPointAngle <= normalizedEndAngle) {
+              inArc = true;
+              break;
+            }
+          } else {
+            if (normalizedPointAngle >= normalizedStartAngle || normalizedPointAngle <= normalizedEndAngle) {
+              inArc = true;
+              break;
+            }
+          }
+        }
 
-          // Notify about the hit
+        if (inArc) {
+          damagePlayer(targetId, weapon.damage || 15);
           io.emit("playerHit", {
             attackerId: attackerId,
             targetId: targetId,
-            damage: attackDamage,
+            damage: weapon.damage || 15
           });
         }
       }
