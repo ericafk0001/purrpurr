@@ -348,8 +348,7 @@ io.on("connection", (socket) => {
   // Give starting items
   const startingItems = [
     { ...items.hammer, slot: 0 },
-    { ...items.hammer, slot: 1 },
-    { ...items.hammer, slot: 2 },
+    { ...items.apple, slot: 1 }, // Give player an apple in slot 2
   ];
 
   startingItems.forEach((item) => {
@@ -357,7 +356,8 @@ io.on("connection", (socket) => {
   });
 
   // Set initial active item
-  players[socket.id].inventory.selectedItem = players[socket.id].inventory.slots[0];
+  players[socket.id].inventory.selectedItem =
+    players[socket.id].inventory.slots[0];
 
   // Send both players and trees data to new player
   socket.emit("initGame", {
@@ -548,7 +548,7 @@ io.on("connection", (socket) => {
 
       // Account for player radius in range check
       const effectiveRange = attackRange + config.collision.sizes.player;
-      
+
       if (distance <= effectiveRange) {
         // Check multiple points around target's collision circle
         const numPoints = 8; // Check 8 points around the circle
@@ -556,27 +556,37 @@ io.on("connection", (socket) => {
 
         for (let i = 0; i < numPoints; i++) {
           const angle = (i / numPoints) * Math.PI * 2;
-          const pointX = target.x + Math.cos(angle) * config.collision.sizes.player;
-          const pointY = target.y + Math.sin(angle) * config.collision.sizes.player;
-          
+          const pointX =
+            target.x + Math.cos(angle) * config.collision.sizes.player;
+          const pointY =
+            target.y + Math.sin(angle) * config.collision.sizes.player;
+
           // Calculate angle to this point
           const pointDx = pointX - attacker.x;
           const pointDy = pointY - attacker.y;
           const angleToPoint = Math.atan2(pointDy, pointDx);
-          
+
           // Normalize angles
-          const normalizedPointAngle = (angleToPoint + Math.PI * 2) % (Math.PI * 2);
-          const normalizedStartAngle = (startAngle + Math.PI * 2) % (Math.PI * 2);
+          const normalizedPointAngle =
+            (angleToPoint + Math.PI * 2) % (Math.PI * 2);
+          const normalizedStartAngle =
+            (startAngle + Math.PI * 2) % (Math.PI * 2);
           const normalizedEndAngle = (endAngle + Math.PI * 2) % (Math.PI * 2);
 
           // Check if point is within arc
           if (normalizedStartAngle <= normalizedEndAngle) {
-            if (normalizedPointAngle >= normalizedStartAngle && normalizedPointAngle <= normalizedEndAngle) {
+            if (
+              normalizedPointAngle >= normalizedStartAngle &&
+              normalizedPointAngle <= normalizedEndAngle
+            ) {
               inArc = true;
               break;
             }
           } else {
-            if (normalizedPointAngle >= normalizedStartAngle || normalizedPointAngle <= normalizedEndAngle) {
+            if (
+              normalizedPointAngle >= normalizedStartAngle ||
+              normalizedPointAngle <= normalizedEndAngle
+            ) {
               inArc = true;
               break;
             }
@@ -588,7 +598,7 @@ io.on("connection", (socket) => {
           io.emit("playerHit", {
             attackerId: attackerId,
             targetId: targetId,
-            damage: weapon.damage || 15
+            damage: weapon.damage || 15,
           });
         }
       }
@@ -599,6 +609,33 @@ io.on("connection", (socket) => {
     console.log("Player disconnected:", socket.id);
     delete players[socket.id];
     io.emit("playerDisconnected", socket.id);
+  });
+
+  // Add new socket handler for item use
+  socket.on("useItem", (data) => {
+    const player = players[socket.id];
+    if (!player || player.isDead) return;
+
+    const item = player.inventory.slots[data.slot];
+    if (!item) return;
+
+    // Handle consumable items
+    if (item.type === "consumable") {
+      switch (item.id) {
+        case "apple":
+          healPlayer(socket.id, item.healAmount);
+          // Remove this line to keep the apple:
+          // player.inventory.slots[data.slot] = null;
+
+          // Update clients about heal effect (optional)
+          io.emit("itemUsed", {
+            id: socket.id,
+            slot: data.slot,
+            itemId: item.id,
+          });
+          break;
+      }
+    }
   });
 });
 

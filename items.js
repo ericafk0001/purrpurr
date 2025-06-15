@@ -20,6 +20,23 @@ const gameItems = {
       moveSpeedMultiplier: 1.0, // Player move speed multiplier when equipped
     },
   },
+  apple: {
+    id: "apple",
+    name: "Apple",
+    type: "consumable",
+    healAmount: 20,
+    asset: "./assets/apple.png",
+    slot: 1, // default second slot
+    renderOptions: {
+      scale: 0.7, // Scale multiplier relative to player size
+      offsetX: 0.3,
+      offsetY: -0.5,
+      rotationOffset: 0,
+    },
+    useEffect: {
+      cooldown: 10,
+    },
+  },
 };
 
 // Make items available globally in browser

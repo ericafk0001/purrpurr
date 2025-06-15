@@ -43,6 +43,7 @@ const assets = {
 ctx.imageSmoothingEnabled = true;
 ctx.imageSmoothingQuality = "high";
 
+// Modify loadAssets function to include apple
 function loadAssets() {
   Object.keys(config.assets).forEach((key) => {
     const img = new Image();
@@ -60,6 +61,7 @@ function loadAssets() {
 
   const itemAssets = {
     hammer: items.hammer.asset,
+    apple: items.apple.asset,
   };
   Object.entries(itemAssets).forEach(([key, path]) => {
     const img = new Image();
@@ -894,6 +896,16 @@ function handleInventorySelection(index) {
   socket.emit("inventorySelect", { slot: index });
 }
 
+// Add useItem function
+function useItem(slot) {
+  if (!myPlayer?.inventory?.slots[slot]) return;
+
+  const item = myPlayer.inventory.slots[slot];
+  if (item.type === "consumable") {
+    socket.emit("useItem", { slot });
+  }
+}
+
 // Modify startAttack function
 function startAttack() {
   if (!canAutoAttackWithCurrentItem()) {
@@ -1033,7 +1045,7 @@ function startAttack() {
   }
 }
 
-// Add to event listeners section for number keys 1-5
+// Add to event listeners section for number keys 1-5 and Q
 window.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     if (!chatMode) {
@@ -1086,6 +1098,17 @@ window.addEventListener("keydown", (e) => {
   const keyNum = parseInt(e.key);
   if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 5) {
     handleInventorySelection(keyNum - 1);
+  }
+
+  // Quick select apple with Q
+  if (e.key.toLowerCase() === "q" && !chatMode) {
+    // Find first apple slot
+    const appleSlot = myPlayer?.inventory?.slots.findIndex(
+      (item) => item?.id === "apple"
+    );
+    if (appleSlot !== -1) {
+      handleInventorySelection(appleSlot);
+    }
   }
 
   if (e.key.toLowerCase() === "e" && !chatMode) {
@@ -1164,10 +1187,19 @@ gameLoop();
 // Add mouse click handler for attacks
 window.addEventListener("mousedown", (e) => {
   if (e.button === 0 && !chatMode) {
-    // Left click and not in chat
-    startAttack();
+    // Left click
+    const activeItem =
+      myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
+    if (activeItem?.type === "consumable") {
+      useItem(myPlayer.inventory.activeSlot);
+    } else {
+      startAttack();
+    }
   }
 });
+
+// Remove right-click context menu handler since we're not using right-click anymore
+// Remove canvas.addEventListener("contextmenu"...)
 
 // Add socket listeners for attack events
 socket.on("playerAttackStart", (data) => {
