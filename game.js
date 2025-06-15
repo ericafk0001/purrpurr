@@ -896,6 +896,14 @@ function handleInventorySelection(index) {
   socket.emit("inventorySelect", { slot: index });
 }
 
+// Add item use event handler after other socket handlers
+socket.on("itemUsed", (data) => {
+  if (data.id === socket.id && data.itemId === "apple") {
+    // Switch back to hammer (slot 0) after using apple
+    handleInventorySelection(0);
+  }
+});
+
 // Add useItem function
 function useItem(slot) {
   if (!myPlayer?.inventory?.slots[slot]) return;
@@ -903,6 +911,7 @@ function useItem(slot) {
   const item = myPlayer.inventory.slots[slot];
   if (item.type === "consumable") {
     socket.emit("useItem", { slot });
+    // Let server event handler switch back to hammer
   }
 }
 
