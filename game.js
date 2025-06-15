@@ -836,8 +836,12 @@ function drawInventory() {
     const isSelected = i === myPlayer.inventory.activeSlot;
 
     // Draw slot background
-    ctx.fillStyle = isSelected ? 'rgba(100, 100, 100, 0.5)' : inv.displayUI.backgroundColor;
-    ctx.strokeStyle = isSelected ? inv.displayUI.selectedBorderColor : inv.displayUI.borderColor;
+    ctx.fillStyle = isSelected
+      ? "rgba(100, 100, 100, 0.5)"
+      : inv.displayUI.backgroundColor;
+    ctx.strokeStyle = isSelected
+      ? inv.displayUI.selectedBorderColor
+      : inv.displayUI.borderColor;
     ctx.lineWidth = inv.displayUI.borderWidth;
 
     // Draw slot
@@ -848,18 +852,19 @@ function drawInventory() {
 
     // Draw item if exists
     if (item && assets[item.id]) {
-      ctx.drawImage(assets[item.id], 
-        x + 5, 
-        y + 5, 
-        slotSize - 10, 
+      ctx.drawImage(
+        assets[item.id],
+        x + 5,
+        y + 5,
+        slotSize - 10,
         slotSize - 10
       );
     }
 
     // Draw slot number
-    ctx.fillStyle = 'white';
-    ctx.font = '14px Arial';
-    ctx.textAlign = 'left';
+    ctx.fillStyle = "white";
+    ctx.font = "14px Arial";
+    ctx.textAlign = "left";
     ctx.fillText(`${i + 1}`, x + 5, y + 15);
   });
 }
@@ -867,16 +872,69 @@ function drawInventory() {
 // Replace the handleInventorySelection function
 function handleInventorySelection(index) {
   if (!myPlayer?.inventory) return;
-  
+
   // Validate slot index
   if (index < 0 || index >= myPlayer.inventory.slots.length) return;
 
+  const newSlotItem = myPlayer.inventory.slots[index];
+
   // Update active slot
   myPlayer.inventory.activeSlot = index;
-  myPlayer.inventory.selectedItem = myPlayer.inventory.slots[index];
+  myPlayer.inventory.selectedItem = newSlotItem;
+
+  // Check if switching to a weapon slot while auto-attack is enabled
+  if (autoAttackEnabled && newSlotItem?.id === "hammer") {
+    // Force start a new attack sequence
+    isAttacking = false;
+    lastAttackTime = 0;
+    startAttack();
+  }
 
   // Notify server of slot change
   socket.emit("inventorySelect", { slot: index });
+}
+
+// Modify startAttack function
+function startAttack() {
+  if (!canAutoAttackWithCurrentItem()) {
+    // Don't disable auto-attack when switching to non-weapon,
+    // just don't perform the attack
+    return;
+  }
+
+  const now = Date.now();
+  const cooldown = items.hammer.cooldown || 800;
+
+  // Only start attack if we're not in cooldown
+  if (now - lastAttackTime > cooldown) {
+    isAttacking = true;
+    lastAttackTime = now;
+    attackAnimationProgress = 0;
+
+    socket.emit("attackStart");
+
+    if (myPlayer) {
+      myPlayer.attacking = true;
+      myPlayer.attackProgress = 0;
+    }
+  }
+}
+
+// Add new helper function for auto-attack resume logic
+function checkAutoAttackResume() {
+  if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
+    // Start attacking if we switched to a valid weapon
+    startAttack();
+  }
+}
+
+// Update toggle auto attack function
+function toggleAutoAttack() {
+  autoAttackEnabled = !autoAttackEnabled;
+
+  if (autoAttackEnabled) {
+    checkAutoAttackResume();
+  }
 }
 
 // Modify this function to handle auto-attacking
@@ -896,15 +954,11 @@ function gameLoop() {
       myPlayer.attacking = false;
       myPlayer.attackProgress = 0;
 
-      // If auto-attack is enabled, queue next attack after cooldown
-      if (autoAttackEnabled) {
+      // Queue next attack only if auto-attack is enabled and we have valid weapon
+      if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
         const cooldownRemaining =
           (items.hammer.cooldown || 800) - attackDuration;
-        if (cooldownRemaining > 0) {
-          setTimeout(startAttack, cooldownRemaining);
-        } else {
-          startAttack();
-        }
+        setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
     }
   }
@@ -935,44 +989,43 @@ function gameLoop() {
 function toggleAutoAttack() {
   autoAttackEnabled = !autoAttackEnabled;
 
-  if (autoAttackEnabled) {
-    // Start attacking immediately when enabled
+  // If enabling auto-attack and we have a valid weapon, start attacking
+  if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
     startAttack();
-
-    // Visual feedback that auto-attack is on
-    const feedbackEl = document.createElement("div");
-    feedbackEl.id = "auto-attack-indicator";
-    feedbackEl.textContent = "Auto-Attack ON";
-    feedbackEl.style.position = "absolute";
-    feedbackEl.style.top = "10px";
-    feedbackEl.style.right = "10px";
-    feedbackEl.style.backgroundColor = "rgba(255, 0, 0, 0.7)";
-    feedbackEl.style.color = "white";
-    feedbackEl.style.padding = "5px 10px";
-    feedbackEl.style.borderRadius = "5px";
-    feedbackEl.style.fontWeight = "bold";
-    document.body.appendChild(feedbackEl);
-  } else {
-    // Remove indicator when disabled
-    const indicator = document.getElementById("auto-attack-indicator");
-    if (indicator) document.body.removeChild(indicator);
   }
 }
 
-// Start attack function
-function startAttack() {
-  const now = Date.now();
+// New helper function to check if current item supports auto-attack
+function canAutoAttackWithCurrentItem() {
+  if (!myPlayer?.inventory?.slots) return false;
 
-  // Check if we can attack (not in cooldown)
-  if (now - lastAttackTime > (items.hammer.cooldown || 800)) {
+  const activeItem = myPlayer.inventory.slots[myPlayer.inventory.activeSlot];
+  if (!activeItem) return false;
+
+  // List of items that support auto-attack
+  const autoAttackableItems = ["hammer"];
+  return autoAttackableItems.includes(activeItem.id);
+}
+
+// Modify startAttack function
+function startAttack() {
+  if (!canAutoAttackWithCurrentItem()) {
+    // Don't disable auto-attack when switching to non-weapon,
+    // just don't perform the attack
+    return;
+  }
+
+  const now = Date.now();
+  const cooldown = items.hammer.cooldown || 800;
+
+  // Only start attack if we're not in cooldown
+  if (now - lastAttackTime > cooldown) {
     isAttacking = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
 
-    // Tell server about attack
     socket.emit("attackStart");
 
-    // Local animation update
     if (myPlayer) {
       myPlayer.attacking = true;
       myPlayer.attackProgress = 0;
