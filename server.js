@@ -308,19 +308,22 @@ function isPositionSafe(x, y) {
 
 let lastModified = Date.now();
 
-// Watch relevant directories for changes
-const watchDirs = [__dirname];
-watchDirs.forEach((dir) => {
-  fs.watch(dir, (eventType, filename) => {
-    if (filename && !filename.includes("node_modules")) {
-      lastModified = Date.now();
-    }
+// Replace file watching code with environment-aware code
+// Only watch files in development environment
+if (process.env.NODE_ENV === "development") {
+  const watchDirs = [__dirname];
+  watchDirs.forEach((dir) => {
+    fs.watch(dir, (eventType, filename) => {
+      if (filename && !filename.includes("node_modules")) {
+        lastModified = Date.now();
+      }
+    });
   });
-});
+}
 
-// Add endpoint to check last modified time
+// Modify the last-modified endpoint to return proper JSON
 app.get("/last-modified", (req, res) => {
-  res.json(lastModified);
+  res.json({ timestamp: lastModified });
 });
 
 generateTrees();
