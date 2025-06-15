@@ -72,11 +72,6 @@ function loadAssets() {
   });
 }
 
-socket.on("currentPlayers", (serverPlayers) => {
-  players = serverPlayers;
-  myPlayer = players[socket.id];
-});
-
 socket.on("newPlayer", (playerInfo) => {
   players[playerInfo.id] = {
     ...playerInfo,
@@ -823,18 +818,6 @@ function drawChatInput() {
   ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
 }
 
-// Initialize empty inventory slots
-function initInventory() {
-  if (!myPlayer.inventory) {
-    myPlayer.inventory = new window.InventorySystem(
-      config.player.inventory.initialSlots
-    );
-    // Add hammer to first slot
-    myPlayer.inventory.addItem(items.hammer, 0);
-    myPlayer.inventory.selectSlot(0);
-  }
-}
-
 // Draw the inventory UI
 function drawInventory() {
   if (!config.player.inventory.enabled || !myPlayer?.inventory) return;
@@ -842,21 +825,22 @@ function drawInventory() {
   const inv = config.player.inventory;
   const slotSize = inv.displayUI.slotSize;
   const padding = inv.displayUI.padding;
-  const startX = (canvas.width - (slotSize + padding) * inv.currentSlots) / 2;
+  const slots = myPlayer.inventory.slots;
+  const startX = (canvas.width - (slotSize + padding) * slots.length) / 2;
   const startY = canvas.height - slotSize - inv.displayUI.bottomOffset;
 
-  myPlayer.inventory.slots.forEach((item, i) => {
+  // Draw all slots
+  slots.forEach((item, i) => {
     const x = startX + i * (slotSize + padding);
     const y = startY;
     const isSelected = i === myPlayer.inventory.activeSlot;
 
     // Draw slot background
-    ctx.fillStyle = inv.displayUI.backgroundColor;
-    ctx.strokeStyle = isSelected
-      ? inv.displayUI.selectedBorderColor
-      : inv.displayUI.borderColor;
+    ctx.fillStyle = isSelected ? 'rgba(100, 100, 100, 0.5)' : inv.displayUI.backgroundColor;
+    ctx.strokeStyle = isSelected ? inv.displayUI.selectedBorderColor : inv.displayUI.borderColor;
     ctx.lineWidth = inv.displayUI.borderWidth;
 
+    // Draw slot
     ctx.beginPath();
     ctx.roundRect(x, y, slotSize, slotSize, inv.displayUI.cornerRadius);
     ctx.fill();
@@ -864,34 +848,39 @@ function drawInventory() {
 
     // Draw item if exists
     if (item && assets[item.id]) {
-      ctx.drawImage(
-        assets[item.id],
-        x + 5,
-        y + 5,
-        slotSize - 10,
+      ctx.drawImage(assets[item.id], 
+        x + 5, 
+        y + 5, 
+        slotSize - 10, 
         slotSize - 10
       );
     }
+
+    // Draw slot number
+    ctx.fillStyle = 'white';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${i + 1}`, x + 5, y + 15);
   });
 }
 
-// Handle inventory slot selection
+// Replace the handleInventorySelection function
 function handleInventorySelection(index) {
   if (!myPlayer?.inventory) return;
+  
+  // Validate slot index
+  if (index < 0 || index >= myPlayer.inventory.slots.length) return;
 
-  const success = myPlayer.inventory.selectSlot(index);
-  if (success) {
-    socket.emit("inventorySelect", { slot: index });
-  }
+  // Update active slot
+  myPlayer.inventory.activeSlot = index;
+  myPlayer.inventory.selectedItem = myPlayer.inventory.slots[index];
+
+  // Notify server of slot change
+  socket.emit("inventorySelect", { slot: index });
 }
 
 // Modify this function to handle auto-attacking
 function gameLoop() {
-  // Initialize inventory if needed
-  if (myPlayer && !myPlayer.inventory) {
-    initInventory();
-  }
-
   // Update attack animation
   if (isAttacking && myPlayer) {
     const now = Date.now();
@@ -1040,14 +1029,10 @@ window.addEventListener("keydown", (e) => {
     config.collision.debug = !config.collision.debug;
   }
 
-  // Number keys for inventory selection (1-5 initially)
+  // Number keys for inventory selection (1-5)
   const keyNum = parseInt(e.key);
-  if (
-    !isNaN(keyNum) &&
-    keyNum >= 1 &&
-    keyNum <= config.player.inventory.currentSlots
-  ) {
-    handleInventorySelection(keyNum - 1); // Convert to 0-based index
+  if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 5) {
+    handleInventorySelection(keyNum - 1);
   }
 
   if (e.key.toLowerCase() === "e" && !chatMode) {
@@ -1143,33 +1128,6 @@ socket.on("playerAttackStart", (data) => {
 socket.on("playerAttackEnd", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = false;
-  }
-});
-
-// Listen for damage events
-socket.on("playerDamaged", (data) => {
-  if (players[data.playerId]) {
-    players[data.playerId].health = data.health;
-
-    // Optional: Add visual feedback for player taking damage
-    if (data.playerId === socket.id) {
-      // Player took damage, flash screen red
-      const damageOverlay = document.createElement("div");
-      damageOverlay.style.position = "absolute";
-      damageOverlay.style.top = "0";
-      damageOverlay.style.left = "0";
-      damageOverlay.style.width = "100%";
-      damageOverlay.style.height = "100%";
-      damageOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
-      damageOverlay.style.pointerEvents = "none";
-      damageOverlay.style.zIndex = "1000";
-      document.body.appendChild(damageOverlay);
-
-      // Remove after a short duration
-      setTimeout(() => {
-        document.body.removeChild(damageOverlay);
-      }, 100);
-    }
   }
 });
 
@@ -1284,32 +1242,6 @@ function showDamageEffect() {
   }, 200);
 }
 
-// Death screen
-function showDeathScreen() {
-  const deathScreen = document.createElement("div");
-  deathScreen.id = "death-screen";
-  deathScreen.style.position = "fixed";
-  deathScreen.style.top = 0;
-  deathScreen.style.left = 0;
-  deathScreen.style.width = "100%";
-  deathScreen.style.height = "100%";
-  deathScreen.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-  deathScreen.style.color = "white";
-  deathScreen.style.display = "flex";
-  deathScreen.style.justifyContent = "center";
-  deathScreen.style.alignItems = "center";
-  deathScreen.style.fontSize = "32px";
-  deathScreen.style.zIndex = 1001;
-  deathScreen.innerHTML = "<div>You died! Respawning...</div>";
-  document.body.appendChild(deathScreen);
-}
-
-function hideDeathScreen() {
-  const deathScreen = document.getElementById("death-screen");
-  if (deathScreen) {
-    document.body.removeChild(deathScreen);
-  }
-}
 // Death screen
 function showDeathScreen() {
   const deathScreen = document.createElement("div");
