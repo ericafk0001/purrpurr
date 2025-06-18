@@ -504,19 +504,25 @@ io.on("connection", (socket) => {
     player.lastAttackTime = now;
     player.attackProgress = 0;
 
-    // Broadcast attack start with timing info
+    // Broadcast attack start with timing info to all clients
     io.emit("playerAttackStart", {
       id: socket.id,
       startTime: now,
     });
 
-    // Process the attack after a slight delay (for animation)
+    // Process the attack after animation delay
     setTimeout(() => {
       processAttack(socket.id);
 
-      // End attack state
-      player.attacking = false;
-      io.emit("playerAttackEnd", { id: socket.id });
+      // Reset attack state
+      if (player) {
+        player.attacking = false;
+        player.attackProgress = 0;
+        io.emit("playerAttackEnd", {
+          id: socket.id,
+          endTime: Date.now(),
+        });
+      }
     }, items.hammer.useTime);
   });
 
