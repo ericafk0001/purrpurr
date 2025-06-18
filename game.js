@@ -17,7 +17,6 @@ const items = window.gameItems || {};
 let lastAttackTime = 0;
 let attackAnimationProgress = 0;
 let isAttacking = false;
-let isAnimating = false; // New variable to track animation state
 const attackDuration = 250; // Faster animation (reduced from 400ms)
 let autoAttackEnabled = false; // New toggle for auto-attack mode
 
@@ -85,39 +84,17 @@ socket.on("newPlayer", (playerInfo) => {
   };
 });
 
-// Update the initGame handler to properly initialize attack states
-socket.on("initGame", (gameState) => {
-  players = gameState.players;
-  trees = gameState.trees || [];
-  stones = gameState.stones || [];
-  myPlayer = players[socket.id];
-
-  // Reset local attack states on connection
-  isAttacking = false;
-  isAnimating = false;
-  lastAttackTime = 0;
-  attackAnimationProgress = 0;
-});
-
-// Update playerMoved handler to properly sync attack states
 socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
+    // Preserve and update animation state
+    const player = players[playerInfo.id];
     players[playerInfo.id] = {
       ...playerInfo,
-      attacking: playerInfo.attacking || false,
-      attackProgress: playerInfo.attackProgress || 0,
-      attackStartTime: playerInfo.attackStartTime || 0,
+      inventory: playerInfo.inventory || player.inventory,
+      attacking: playerInfo.attacking,
+      attackProgress: playerInfo.attackProgress,
+      attackStartTime: playerInfo.attackStartTime,
     };
-
-    // Sync our local state if this is our player
-    if (playerInfo.id === socket.id && myPlayer) {
-      isAttacking = playerInfo.attacking || false;
-      isAnimating = playerInfo.attacking || false;
-      attackAnimationProgress = playerInfo.attackProgress || 0;
-      if (playerInfo.attackStartTime) {
-        lastAttackTime = playerInfo.attackStartTime;
-      }
-    }
   }
 });
 
@@ -131,12 +108,6 @@ socket.on("initGame", (gameState) => {
   trees = gameState.trees || [];
   stones = gameState.stones || [];
   myPlayer = players[socket.id];
-
-  // Reset local attack states on connection
-  isAttacking = false;
-  isAnimating = false;
-  lastAttackTime = 0;
-  attackAnimationProgress = 0;
 });
 
 // set initial canvas size
@@ -947,15 +918,17 @@ function useItem(slot) {
 // Modify startAttack function
 function startAttack() {
   if (!canAutoAttackWithCurrentItem()) {
+    // Don't disable auto-attack when switching to non-weapon,
+    // just don't perform the attack
     return;
   }
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
 
-  if (now - lastAttackTime > cooldown && !isAnimating) {
+  // Only start attack if we're not in cooldown
+  if (now - lastAttackTime > cooldown) {
     isAttacking = true;
-    isAnimating = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
 
@@ -988,7 +961,7 @@ function toggleAutoAttack() {
 // Modify this function to handle auto-attacking
 function gameLoop() {
   // Update attack animation
-  if (isAnimating && myPlayer) {
+  if (isAttacking && myPlayer) {
     const now = Date.now();
     const elapsed = now - lastAttackTime;
 
@@ -999,7 +972,6 @@ function gameLoop() {
     } else {
       // End attack animation
       isAttacking = false;
-      isAnimating = false;
       myPlayer.attacking = false;
       myPlayer.attackProgress = 0;
 
@@ -1007,19 +979,14 @@ function gameLoop() {
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
         const cooldownRemaining =
           (items.hammer.cooldown || 800) - attackDuration;
-        setTimeout(() => {
-          if (autoAttackEnabled) {
-            // Double check auto-attack is still enabled
-            startAttack();
-          }
-        }, Math.max(0, cooldownRemaining));
+        setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
     }
   }
 
-  // Update attack animations for all other players
+  // Update attack animations for all players
   Object.values(players).forEach((player) => {
-    if (player.id !== socket.id && player.attacking && player.attackStartTime) {
+    if (player.attacking && player.attackStartTime) {
       const now = Date.now();
       const elapsed = now - player.attackStartTime;
 
@@ -1064,15 +1031,17 @@ function canAutoAttackWithCurrentItem() {
 // Modify startAttack function
 function startAttack() {
   if (!canAutoAttackWithCurrentItem()) {
+    // Don't disable auto-attack when switching to non-weapon,
+    // just don't perform the attack
     return;
   }
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
 
-  if (now - lastAttackTime > cooldown && !isAnimating) {
+  // Only start attack if we're not in cooldown
+  if (now - lastAttackTime > cooldown) {
     isAttacking = true;
-    isAnimating = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
 
