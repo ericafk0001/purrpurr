@@ -85,17 +85,39 @@ socket.on("newPlayer", (playerInfo) => {
   };
 });
 
+// Update the initGame handler to properly initialize attack states
+socket.on("initGame", (gameState) => {
+  players = gameState.players;
+  trees = gameState.trees || [];
+  stones = gameState.stones || [];
+  myPlayer = players[socket.id];
+
+  // Reset local attack states on connection
+  isAttacking = false;
+  isAnimating = false;
+  lastAttackTime = 0;
+  attackAnimationProgress = 0;
+});
+
+// Update playerMoved handler to properly sync attack states
 socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
-    // Preserve and update animation state
-    const player = players[playerInfo.id];
     players[playerInfo.id] = {
       ...playerInfo,
-      inventory: playerInfo.inventory || player.inventory,
-      attacking: playerInfo.attacking,
-      attackProgress: playerInfo.attackProgress,
-      attackStartTime: playerInfo.attackStartTime,
+      attacking: playerInfo.attacking || false,
+      attackProgress: playerInfo.attackProgress || 0,
+      attackStartTime: playerInfo.attackStartTime || 0,
     };
+
+    // Sync our local state if this is our player
+    if (playerInfo.id === socket.id && myPlayer) {
+      isAttacking = playerInfo.attacking || false;
+      isAnimating = playerInfo.attacking || false;
+      attackAnimationProgress = playerInfo.attackProgress || 0;
+      if (playerInfo.attackStartTime) {
+        lastAttackTime = playerInfo.attackStartTime;
+      }
+    }
   }
 });
 
@@ -109,6 +131,12 @@ socket.on("initGame", (gameState) => {
   trees = gameState.trees || [];
   stones = gameState.stones || [];
   myPlayer = players[socket.id];
+
+  // Reset local attack states on connection
+  isAttacking = false;
+  isAnimating = false;
+  lastAttackTime = 0;
+  attackAnimationProgress = 0;
 });
 
 // set initial canvas size
