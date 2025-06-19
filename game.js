@@ -150,12 +150,23 @@ resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
 
 // camera functions
+const CAMERA_SMOOTHING = 0.08; // Adjust this value to change camera smoothness (0.1 = very smooth, 0.9 = less smooth)
+const targetCamera = {
+  x: 0,
+  y: 0,
+};
+
+// Replace the updateCamera function
 function updateCamera() {
   if (!myPlayer) return;
 
-  // center camera on player
-  camera.x = myPlayer.x - canvas.width / 2;
-  camera.y = myPlayer.y - canvas.height / 2;
+  // Calculate target camera position (centered on player)
+  targetCamera.x = myPlayer.x - canvas.width / 2;
+  targetCamera.y = myPlayer.y - canvas.height / 2;
+
+  // Smoothly interpolate current camera position toward target
+  camera.x += (targetCamera.x - camera.x) * CAMERA_SMOOTHING;
+  camera.y += (targetCamera.y - camera.y) * CAMERA_SMOOTHING;
 }
 
 // add after camera object
@@ -164,17 +175,19 @@ const mouse = {
   y: 0,
 };
 
-// add this function after updatecamera
+// modify updateRotation function to use target camera position
 function updateRotation() {
   if (!myPlayer) return;
   const screenMouseX = mouse.x;
   const screenMouseY = mouse.y;
-  const worldMouseX = screenMouseX + camera.x;
-  const worldMouseY = screenMouseY + camera.y;
+
+  // Use targetCamera instead of camera for consistent aiming
+  const worldMouseX = screenMouseX + targetCamera.x;
+  const worldMouseY = screenMouseY + targetCamera.y;
 
   const dx = worldMouseX - myPlayer.x;
   const dy = worldMouseY - myPlayer.y;
-  myPlayer.rotation = Math.atan2(dy, dx) - Math.PI / 2; // Changed from + to -
+  myPlayer.rotation = Math.atan2(dy, dx) - Math.PI / 2;
 
   socket.emit("playerMovement", {
     x: myPlayer.x,
@@ -850,8 +863,8 @@ function drawCollisionCircles() {
           const playerAngle = player.rotation + Math.PI / 2;
 
           // Calculate the center of the weapon hitbox in front of player
-          const hitboxX = player.x + Math.cos(playerAngle) * (weaponRange / 2);
-          const hitboxY = player.y + Math.sin(playerAngle) * (weaponRange / 2);
+          const hitboxX = player.x + Math.cos(playerAngle) + weaponRange / 2;
+          const hitboxY = player.y + Math.sin(playerAngle) + weaponRange / 2;
 
           // Draw weapon hitbox
           ctx.fillStyle = config.collision.weaponDebugColor;

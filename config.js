@@ -2,7 +2,7 @@ const gameConfig = {
   worldWidth: 5000,
   worldHeight: 5000,
   playerRadius: 60,
-  moveSpeed: 14,
+  moveSpeed: 6.5,
   colors: {
     player: "red",
     tree: "green",
