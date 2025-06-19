@@ -40,6 +40,10 @@ const assets = {
   },
 };
 
+// Add FPS tracking variables
+let lastFrameTime = performance.now();
+let fps = 0;
+
 // enable image smoothing
 ctx.imageSmoothingEnabled = true;
 ctx.imageSmoothingQuality = "high";
@@ -1053,6 +1057,12 @@ function toggleAutoAttack() {
 
 // Modify this function to handle auto-attacking
 function gameLoop() {
+  // Calculate FPS
+  const now = performance.now();
+  const elapsed = now - lastFrameTime;
+  fps = Math.round(1000 / elapsed);
+  lastFrameTime = now;
+
   // Update attack animation
   if (isAttacking && myPlayer) {
     const now = Date.now();
@@ -1309,7 +1319,7 @@ function drawDebugPanel() {
   ctx.textAlign = "left";
 
   const debugInfo = [
-    `FPS: ${Math.round(1000 / (Date.now() - lastServerSync))}`,
+    `FPS: ${fps}`,
     `Position: ${Math.round(myPlayer.x)}, ${Math.round(myPlayer.y)}`,
     `Health: ${myPlayer.health}/${config.player.health.max}`,
     `Players: ${Object.keys(players).length}`,
