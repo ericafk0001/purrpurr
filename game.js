@@ -42,7 +42,10 @@ const assets = {
 
 // Add FPS tracking variables
 let lastFrameTime = performance.now();
-let fps = 0;
+let frameCount = 0;
+let currentFps = 0;
+let lastFpsUpdate = 0;
+const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
 
 // enable image smoothing
 ctx.imageSmoothingEnabled = true;
@@ -120,6 +123,21 @@ socket.on("initGame", (gameState) => {
 // Add new socket handler for wall placement
 socket.on("wallPlaced", (wallData) => {
   walls.push(wallData);
+});
+
+// Add near other socket handlers
+socket.on("playerTeleported", (data) => {
+  if (players[data.playerId]) {
+    players[data.playerId].x = data.x;
+    players[data.playerId].y = data.y;
+
+    // If this was our player, update camera immediately
+    if (data.playerId === socket.id && myPlayer) {
+      myPlayer.x = data.x;
+      myPlayer.y = data.y;
+      updateCamera();
+    }
+  }
 });
 
 // set initial canvas size
@@ -582,33 +600,56 @@ function resolvePlayerCollisions() {
     const minDist = config.collision.sizes.player * 2;
 
     if (distance < minDist && distance > 0) {
-      // calculate collision force
+      // Calculate separation force with improved damping
       const overlap = minDist - distance;
-      const force = overlap * 0.5; // adjust force strength
+      const separationForce = Math.min(overlap * 0.5, config.moveSpeed); // Limit maximum force
+      const dampingFactor = 0.8; // Add damping to reduce oscillation
 
-      // normalize direction and apply force
-      const pushX = (dx / distance) * force;
-      const pushY = (dy / distance) * force;
+      // Normalize direction and apply damped force
+      const pushX = (dx / distance) * separationForce * dampingFactor;
+      const pushY = (dy / distance) * separationForce * dampingFactor;
 
-      // apply force to my player
-      myPlayer.x += pushX * 0.6;
-      myPlayer.y += pushY * 0.6;
+      // Apply force to my player with improved distribution
+      myPlayer.x += pushX * 0.7;
+      myPlayer.y += pushY * 0.7;
 
-      // apply counter force to other player (local prediction)
-      otherPlayer.x -= pushX * 0.4; // They get pushed less
-      otherPlayer.y -= pushY * 0.4;
+      // Apply counter force to other player
+      otherPlayer.x -= pushX * 0.3;
+      otherPlayer.y -= pushY * 0.3;
 
-      // keep within bounds
-      myPlayer.x = Math.max(
+      // Add small random jitter to help unstuck players
+      if (distance < minDist * 0.5) {
+        const jitter = 0.5;
+        myPlayer.x += (Math.random() - 0.5) * jitter;
+        myPlayer.y += (Math.random() - 0.5) * jitter;
+      }
+
+      // Keep within bounds with smooth clamping
+      myPlayer.x = clampWithEasing(
+        myPlayer.x,
         config.collision.sizes.player,
-        Math.min(config.worldWidth - config.collision.sizes.player, myPlayer.x)
+        config.worldWidth - config.collision.sizes.player
       );
-      myPlayer.y = Math.max(
+      myPlayer.y = clampWithEasing(
+        myPlayer.y,
         config.collision.sizes.player,
-        Math.min(config.worldHeight - config.collision.sizes.player, myPlayer.y)
+        config.worldHeight - config.collision.sizes.player
       );
     }
   }
+}
+
+// Add new helper function for smooth position clamping
+function clampWithEasing(value, min, max) {
+  if (value < min) {
+    const delta = min - value;
+    return min - delta * 0.8; // Smooth bounce from boundaries
+  }
+  if (value > max) {
+    const delta = value - max;
+    return max + delta * 0.8;
+  }
+  return value;
 }
 
 // update updatePosition function
@@ -692,6 +733,10 @@ function resolveCollisionPenetration() {
     })),
   ];
 
+  let totalPushX = 0;
+  let totalPushY = 0;
+  let pushCount = 0;
+
   for (const obstacle of staticObstacles) {
     const dx = playerCircle.x - obstacle.x;
     const dy = playerCircle.y - obstacle.y;
@@ -699,25 +744,33 @@ function resolveCollisionPenetration() {
     const minDist = playerCircle.radius + obstacle.radius;
 
     if (distance < minDist && distance > 0) {
-      // calculate penetration depth
       const penetrationDepth = minDist - distance;
-      // push player out with a slightly stronger force
-      const pushX = (dx / distance) * penetrationDepth * 1.1; // Added 1.1 multiplier
-      const pushY = (dy / distance) * penetrationDepth * 1.1;
+      const pushX = (dx / distance) * penetrationDepth;
+      const pushY = (dy / distance) * penetrationDepth;
 
-      myPlayer.x += pushX;
-      myPlayer.y += pushY;
-
-      // ensure we stay within world bounds
-      myPlayer.x = Math.max(
-        config.collision.sizes.player,
-        Math.min(config.worldWidth - config.collision.sizes.player, myPlayer.x)
-      );
-      myPlayer.y = Math.max(
-        config.collision.sizes.player,
-        Math.min(config.worldHeight - config.collision.sizes.player, myPlayer.y)
-      );
+      totalPushX += pushX;
+      totalPushY += pushY;
+      pushCount++;
     }
+  }
+
+  // Apply average push with damping
+  if (pushCount > 0) {
+    const dampingFactor = 0.8;
+    myPlayer.x += (totalPushX / pushCount) * dampingFactor;
+    myPlayer.y += (totalPushY / pushCount) * dampingFactor;
+
+    // Ensure we stay within bounds with smooth clamping
+    myPlayer.x = clampWithEasing(
+      myPlayer.x,
+      config.collision.sizes.player,
+      config.worldWidth - config.collision.sizes.player
+    );
+    myPlayer.y = clampWithEasing(
+      myPlayer.y,
+      config.collision.sizes.player,
+      config.worldHeight - config.collision.sizes.player
+    );
   }
 }
 
@@ -1057,11 +1110,17 @@ function toggleAutoAttack() {
 
 // Modify this function to handle auto-attacking
 function gameLoop() {
-  // Calculate FPS
   const now = performance.now();
   const elapsed = now - lastFrameTime;
-  fps = Math.round(1000 / elapsed);
   lastFrameTime = now;
+  frameCount++;
+
+  // Update FPS counter at intervals
+  if (now - lastFpsUpdate > FPS_UPDATE_INTERVAL) {
+    currentFps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+    frameCount = 0;
+    lastFpsUpdate = now;
+  }
 
   // Update attack animation
   if (isAttacking && myPlayer) {
@@ -1232,6 +1291,11 @@ window.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "e" && !chatMode) {
     toggleAutoAttack();
   }
+
+  // Add teleport key (T)
+  if (e.key.toLowerCase() === "t" && !chatMode) {
+    socket.emit("teleportRequest");
+  }
 });
 
 window.addEventListener("keyup", (e) => {
@@ -1310,8 +1374,8 @@ function drawDebugPanel() {
   let y = padding;
 
   // Draw semi-transparent background
-  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-  ctx.fillRect(padding, padding, 200, 160);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.4  )";
+  ctx.fillRect(padding, padding, 200, 190);
 
   // Draw debug info
   ctx.fillStyle = "white";
@@ -1319,7 +1383,7 @@ function drawDebugPanel() {
   ctx.textAlign = "left";
 
   const debugInfo = [
-    `FPS: ${fps}`,
+    `FPS: ${currentFps}`,
     `Position: ${Math.round(myPlayer.x)}, ${Math.round(myPlayer.y)}`,
     `Health: ${myPlayer.health}/${config.player.health.max}`,
     `Players: ${Object.keys(players).length}`,
@@ -1327,6 +1391,7 @@ function drawDebugPanel() {
     `Auto-attack: ${autoAttackEnabled ? "ON" : "OFF"}`,
     `Weapon Debug: ${config.collision.weaponDebug ? "ON" : "OFF"}`,
     `Collision Debug: ${config.collision.debug ? "ON" : "OFF"}`,
+    `Press T to teleport`,
   ];
 
   debugInfo.forEach((text) => {
@@ -1577,16 +1642,6 @@ function showDeathScreen() {
   deathScreen.innerHTML = "<div>You died! Respawning...</div>";
   document.body.appendChild(deathScreen);
 }
-
-function hideDeathScreen() {
-  const deathScreen = document.getElementById("death-screen");
-  if (deathScreen) {
-    document.body.removeChild(deathScreen);
-  }
-}
-deathScreen.style.zIndex = 1001;
-deathScreen.innerHTML = "<div>You died! Respawning...</div>";
-document.body.appendChild(deathScreen);
 
 function hideDeathScreen() {
   const deathScreen = document.getElementById("death-screen");

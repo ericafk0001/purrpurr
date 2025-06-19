@@ -731,6 +731,47 @@ io.on("connection", (socket) => {
       inventory: player.inventory,
     });
   });
+
+  // Add after other socket handlers in io.on("connection")
+  socket.on("teleportRequest", () => {
+    const player = players[socket.id];
+    if (!player || player.isDead) return;
+
+    let nearestPlayer = null;
+    let shortestDistance = Infinity;
+    const minSafeDistance = config.collision.sizes.player * 2.5; // Minimum safe distance
+
+    Object.entries(players).forEach(([id, target]) => {
+      if (id !== socket.id && !target.isDead) {
+        const dx = target.x - player.x;
+        const dy = target.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < shortestDistance) {
+          shortestDistance = distance;
+          nearestPlayer = target;
+        }
+      }
+    });
+
+    if (nearestPlayer) {
+      // Calculate safe position slightly offset from target player
+      const angle = Math.random() * Math.PI * 2; // Random angle
+      const teleportX = nearestPlayer.x + Math.cos(angle) * minSafeDistance;
+      const teleportY = nearestPlayer.y + Math.sin(angle) * minSafeDistance;
+
+      // Update player position
+      player.x = teleportX;
+      player.y = teleportY;
+
+      // Notify all clients about teleport
+      io.emit("playerTeleported", {
+        playerId: socket.id,
+        x: player.x,
+        y: player.y,
+      });
+    }
+  });
 });
 
 server.listen(3000, () => {
