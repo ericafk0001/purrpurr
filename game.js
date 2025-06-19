@@ -488,14 +488,17 @@ function drawWall(wall) {
   if (assets.wall) {
     ctx.save();
     ctx.translate(wall.x - camera.x, wall.y - camera.y);
-    ctx.rotate(wall.rotation || 0);
+
+    // Apply rotation - we add 90 degrees (PI/2) to align with player facing
+    ctx.rotate(wall.rotation + Math.PI / 2);
 
     // Use wall dimensions from items configuration
     const wallScale = items.wall.renderOptions.scale;
-    const baseSize = 60; // Base size to scale from
+    const baseSize = 60;
     const wallWidth = baseSize * wallScale;
-    const wallHeight = Math.floor(wallWidth * (417 / 480)); // Maintain aspect ratio
+    const wallHeight = Math.floor(wallWidth * (417 / 480));
 
+    // Draw wall centered on its position
     ctx.drawImage(
       assets.wall,
       -wallWidth / 2,
@@ -1495,7 +1498,7 @@ window.addEventListener("mousedown", (e) => {
       socket.emit("placeWall", {
         x: wallX,
         y: wallY,
-        rotation: myPlayer.rotation,
+        rotation: myPlayer.rotation, // Use player's rotation for wall orientation
       });
 
       // Switch back to hammer
