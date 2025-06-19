@@ -150,7 +150,7 @@ resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
 
 // camera functions
-const CAMERA_SMOOTHING = 0.08; // Adjust this value to change camera smoothness (0.1 = very smooth, 0.9 = less smooth)
+const CAMERA_SMOOTHING = 0.08;
 const targetCamera = {
   x: 0,
   y: 0,
