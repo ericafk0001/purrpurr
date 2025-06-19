@@ -1162,7 +1162,6 @@ function gameLoop() {
   // Update attack animations for all players
   Object.values(players).forEach((player) => {
     if (player.attacking && player.attackStartTime) {
-      const now = Date.now();
       const elapsed = now - player.attackStartTime;
 
       if (elapsed <= attackDuration) {
@@ -1514,7 +1513,8 @@ window.addEventListener("mousedown", (e) => {
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = true;
-    players[data.id].attackStartTime = data.startTime;
+    // Use local time instead of server time
+    players[data.id].attackStartTime = performance.now();
     players[data.id].attackProgress = 0;
   }
 });
