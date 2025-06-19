@@ -24,6 +24,7 @@ let players = {};
 let myPlayer = null;
 let trees = [];
 let stones = [];
+let walls = []; // Add this line
 const keys = { w: false, a: false, s: false, d: false };
 
 const camera = {
@@ -62,6 +63,7 @@ function loadAssets() {
   const itemAssets = {
     hammer: items.hammer.asset,
     apple: items.apple.asset,
+    wall: items.wall.asset, // Add this line to load wall asset
   };
   Object.entries(itemAssets).forEach(([key, path]) => {
     const img = new Image();
@@ -107,7 +109,13 @@ socket.on("initGame", (gameState) => {
   players = gameState.players;
   trees = gameState.trees || [];
   stones = gameState.stones || [];
+  walls = gameState.walls || []; // Add this line
   myPlayer = players[socket.id];
+});
+
+// Add new socket handler for wall placement
+socket.on("wallPlaced", (wallData) => {
+  walls.push(wallData);
 });
 
 // set initial canvas size
@@ -160,35 +168,43 @@ function drawPlayers() {
   // Draw background and grid first
   drawBackground();
 
-  // combine all objects that need Y-sorting - fix player ID mapping
-  const allObjects = [
+  // Define draw layers with fixed order (no Y-sorting)
+  const drawLayers = [
+    // Layer 1 - Walls (bottom)
+    ...walls
+      .filter((wall) => isInViewport(wall))
+      .map((wall) => ({ ...wall, type: "wall" })),
+
+    // Layer 2 - Players and Stones (middle)
     ...Object.entries(players).map(([id, player]) => ({
       ...player,
       id: id,
       type: "player",
     })),
-    ...trees
-      .filter((tree) => isInViewport(tree))
-      .map((tree) => ({ ...tree, type: "tree" })),
     ...stones
       .filter((stone) => isInViewport(stone))
       .map((stone) => ({ ...stone, type: "stone" })),
+
+    // Layer 3 - Trees (top)
+    ...trees
+      .filter((tree) => isInViewport(tree))
+      .map((tree) => ({ ...tree, type: "tree" })),
   ];
 
-  // sort by Y position
-  allObjects.sort((a, b) => a.y - b.y);
-
-  // draw everything in order
-  allObjects.forEach((obj) => {
+  // Draw everything in fixed layer order
+  drawLayers.forEach((obj) => {
     switch (obj.type) {
+      case "wall":
+        drawWall(obj);
+        break;
       case "player":
         drawPlayer(obj);
         break;
-      case "tree":
-        drawTree(obj);
-        break;
       case "stone":
         drawStone(obj);
+        break;
+      case "tree":
+        drawTree(obj);
         break;
     }
   });
@@ -198,10 +214,11 @@ function drawPlayers() {
     drawCollisionCircles();
   }
 
-  // Draw health bars last so they're always on top
+  // Draw UI elements last
   drawHealthBars();
-  drawInventory(); // Draw inventory before chat for proper layering
+  drawInventory();
   drawChatInput();
+  drawDebugPanel(); // Add this line
 }
 
 function drawPlayer(player) {
@@ -278,7 +295,20 @@ function getItemRenderInfo(item, player) {
 
   // Get scale - either from item config or use default
   const scaleMultiplier = renderOpts.scale || 1.2;
-  const scale = config.playerRadius * scaleMultiplier;
+  const baseScale = config.playerRadius * scaleMultiplier;
+
+  // Calculate dimensions preserving aspect ratio if specified
+  let width = baseScale;
+  let height = baseScale;
+
+  if (renderOpts.width && renderOpts.height && renderOpts.preserveRatio) {
+    const ratio = renderOpts.width / renderOpts.height;
+    if (ratio > 1) {
+      height = width / ratio;
+    } else {
+      width = height * ratio;
+    }
+  }
 
   // Get position offsets - either from item config or use defaults
   const offsetXMultiplier =
@@ -287,14 +317,14 @@ function getItemRenderInfo(item, player) {
     renderOpts.offsetY !== undefined ? renderOpts.offsetY : -0.25;
 
   const offsetX = config.playerRadius * offsetXMultiplier;
-  const offsetY = scale * offsetYMultiplier;
+  const offsetY = baseScale * offsetYMultiplier;
 
   // Base settings that apply to most items
   const info = {
     x: offsetX,
     y: offsetY,
-    width: scale,
-    height: scale,
+    width: width,
+    height: height,
     rotation: Math.PI / 2, // horizontal by default
   };
 
@@ -418,18 +448,45 @@ function drawStone(stone) {
   }
 }
 
+// Add new function to draw walls
+function drawWall(wall) {
+  if (assets.wall) {
+    ctx.save();
+    ctx.translate(wall.x - camera.x, wall.y - camera.y);
+    ctx.rotate(wall.rotation || 0);
+
+    // Use wall dimensions from items configuration
+    const wallScale = items.wall.renderOptions.scale;
+    const baseSize = 60; // Base size to scale from
+    const wallWidth = baseSize * wallScale;
+    const wallHeight = Math.floor(wallWidth * (417 / 480)); // Maintain aspect ratio
+
+    ctx.drawImage(
+      assets.wall,
+      -wallWidth / 2,
+      -wallHeight / 2,
+      wallWidth,
+      wallHeight
+    );
+
+    ctx.restore();
+  }
+}
+
 function drawWorldBorder() {
   ctx.strokeStyle = config.colors.worldBorder;
   ctx.lineWidth = 4;
   ctx.strokeRect(-camera.x, -camera.y, config.worldWidth, config.worldHeight);
 }
 
+// Update isInViewport to handle non-circular objects
 function isInViewport(object) {
+  const radius = object.radius || Math.max(30, config.collision.sizes.player);
   return (
-    object.x + object.radius > camera.x &&
-    object.x - object.radius < camera.x + canvas.width &&
-    object.y + object.radius > camera.y &&
-    object.y - object.radius < camera.y + canvas.height
+    object.x + radius > camera.x &&
+    object.x - radius < camera.x + canvas.width &&
+    object.y + radius > camera.y &&
+    object.y - radius < camera.y + canvas.height
   );
 }
 
@@ -474,6 +531,11 @@ function handleCollisions(dx, dy) {
       x: stone.x,
       y: stone.y,
       radius: config.collision.sizes.stone,
+    })),
+    ...walls.map((wall) => ({
+      x: wall.x,
+      y: wall.y,
+      radius: config.collision.sizes.wall,
     })),
   ];
 
@@ -607,7 +669,7 @@ function resolveCollisionPenetration() {
     radius: config.collision.sizes.player,
   };
 
-  // only check static obstacles for penetration resolution
+  // Include walls in static obstacles for penetration resolution
   const staticObstacles = [
     ...trees.map((tree) => ({
       x: tree.x,
@@ -618,6 +680,11 @@ function resolveCollisionPenetration() {
       x: stone.x,
       y: stone.y,
       radius: config.collision.sizes.stone,
+    })),
+    ...walls.map((wall) => ({
+      x: wall.x,
+      y: wall.y,
+      radius: config.collision.sizes.wall,
     })),
   ];
 
@@ -630,9 +697,9 @@ function resolveCollisionPenetration() {
     if (distance < minDist && distance > 0) {
       // calculate penetration depth
       const penetrationDepth = minDist - distance;
-      // push player out
-      const pushX = (dx / distance) * penetrationDepth;
-      const pushY = (dy / distance) * penetrationDepth;
+      // push player out with a slightly stronger force
+      const pushX = (dx / distance) * penetrationDepth * 1.1; // Added 1.1 multiplier
+      const pushY = (dy / distance) * penetrationDepth * 1.1;
 
       myPlayer.x += pushX;
       myPlayer.y += pushY;
@@ -690,6 +757,21 @@ function drawCollisionCircles() {
         stone.x - camera.x,
         stone.y - camera.y,
         config.collision.sizes.stone,
+        0,
+        Math.PI * 2
+      );
+      ctx.stroke();
+    }
+  });
+
+  // Add wall collision circles
+  walls.forEach((wall) => {
+    if (isInViewport(wall)) {
+      ctx.beginPath();
+      ctx.arc(
+        wall.x - camera.x,
+        wall.y - camera.y,
+        config.collision.sizes.wall,
         0,
         Math.PI * 2
       );
@@ -854,13 +936,24 @@ function drawInventory() {
 
     // Draw item if exists
     if (item && assets[item.id]) {
-      ctx.drawImage(
-        assets[item.id],
-        x + 5,
-        y + 5,
-        slotSize - 10,
-        slotSize - 10
-      );
+      // Handle aspect ratio for non-square images
+      let drawWidth = slotSize - 10;
+      let drawHeight = slotSize - 10;
+
+      if (item.renderOptions?.width && item.renderOptions?.height) {
+        const ratio = item.renderOptions.width / item.renderOptions.height;
+        if (ratio > 1) {
+          drawHeight = drawWidth / ratio;
+        } else {
+          drawWidth = drawHeight * ratio;
+        }
+      }
+
+      // Center the item in the slot
+      const itemX = x + 5 + (slotSize - 10 - drawWidth) / 2;
+      const itemY = y + 5 + (slotSize - 10 - drawHeight) / 2;
+
+      ctx.drawImage(assets[item.id], itemX, itemY, drawWidth, drawHeight);
     }
 
     // Draw slot number
@@ -1056,6 +1149,12 @@ function startAttack() {
 
 // Add to event listeners section for number keys 1-5 and Q
 window.addEventListener("keydown", (e) => {
+  // Handle debug panel toggle regardless of chat mode
+  if (e.key === ";") {
+    debugPanelVisible = !debugPanelVisible;
+    return;
+  }
+
   if (e.key === "Enter") {
     if (!chatMode) {
       // enter chat mode
@@ -1189,6 +1288,102 @@ function drawBackground() {
   }
 }
 
+// Add near the top with other state variables
+let debugPanelVisible = false;
+
+// Add after drawChatInput function
+function drawDebugPanel() {
+  if (!debugPanelVisible || !myPlayer) return;
+
+  const padding = 10;
+  const lineHeight = 20;
+  let y = padding;
+
+  // Draw semi-transparent background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(padding, padding, 200, 160);
+
+  // Draw debug info
+  ctx.fillStyle = "white";
+  ctx.font = "12px monospace";
+  ctx.textAlign = "left";
+
+  const debugInfo = [
+    `FPS: ${Math.round(1000 / (Date.now() - lastServerSync))}`,
+    `Position: ${Math.round(myPlayer.x)}, ${Math.round(myPlayer.y)}`,
+    `Health: ${myPlayer.health}/${config.player.health.max}`,
+    `Players: ${Object.keys(players).length}`,
+    `Walls: ${walls.length}`,
+    `Auto-attack: ${autoAttackEnabled ? "ON" : "OFF"}`,
+    `Weapon Debug: ${config.collision.weaponDebug ? "ON" : "OFF"}`,
+    `Collision Debug: ${config.collision.debug ? "ON" : "OFF"}`,
+  ];
+
+  debugInfo.forEach((text) => {
+    ctx.fillText(text, padding * 2, (y += lineHeight));
+  });
+}
+
+// Add debug panel to UI drawing in drawPlayers function
+function drawPlayers() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw background and grid first
+  drawBackground();
+
+  // Define draw layers with fixed order (no Y-sorting)
+  const drawLayers = [
+    // Layer 1 - Walls (bottom)
+    ...walls
+      .filter((wall) => isInViewport(wall))
+      .map((wall) => ({ ...wall, type: "wall" })),
+
+    // Layer 2 - Players and Stones (middle)
+    ...Object.entries(players).map(([id, player]) => ({
+      ...player,
+      id: id,
+      type: "player",
+    })),
+    ...stones
+      .filter((stone) => isInViewport(stone))
+      .map((stone) => ({ ...stone, type: "stone" })),
+
+    // Layer 3 - Trees (top)
+    ...trees
+      .filter((tree) => isInViewport(tree))
+      .map((tree) => ({ ...tree, type: "tree" })),
+  ];
+
+  // Draw everything in fixed layer order
+  drawLayers.forEach((obj) => {
+    switch (obj.type) {
+      case "wall":
+        drawWall(obj);
+        break;
+      case "player":
+        drawPlayer(obj);
+        break;
+      case "stone":
+        drawStone(obj);
+        break;
+      case "tree":
+        drawTree(obj);
+        break;
+    }
+  });
+
+  drawWorldBorder();
+  if (config.collision.debug) {
+    drawCollisionCircles();
+  }
+
+  // Draw UI elements last
+  drawHealthBars();
+  drawInventory();
+  drawChatInput();
+  drawDebugPanel(); // Add this line
+}
+
 loadAssets();
 
 gameLoop();
@@ -1196,11 +1391,28 @@ gameLoop();
 // Add mouse click handler for attacks
 window.addEventListener("mousedown", (e) => {
   if (e.button === 0 && !chatMode) {
-    // Left click
     const activeItem =
       myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
-    if (activeItem?.type === "consumable") {
+    if (!activeItem) return;
+
+    if (activeItem.type === "consumable") {
       useItem(myPlayer.inventory.activeSlot);
+    } else if (activeItem.type === "placeable") {
+      // Calculate wall position in front of player
+      const wallDistance = 79; // Distance from player center
+      const angle = myPlayer.rotation + Math.PI / 2; // Player's facing angle
+      const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
+      const wallY = myPlayer.y + Math.sin(angle) * wallDistance;
+
+      // Request wall placement from server
+      socket.emit("placeWall", {
+        x: wallX,
+        y: wallY,
+        rotation: myPlayer.rotation,
+      });
+
+      // Switch back to hammer
+      handleInventorySelection(0);
     } else {
       startAttack();
     }
@@ -1355,6 +1567,16 @@ function showDeathScreen() {
   deathScreen.innerHTML = "<div>You died! Respawning...</div>";
   document.body.appendChild(deathScreen);
 }
+
+function hideDeathScreen() {
+  const deathScreen = document.getElementById("death-screen");
+  if (deathScreen) {
+    document.body.removeChild(deathScreen);
+  }
+}
+deathScreen.style.zIndex = 1001;
+deathScreen.innerHTML = "<div>You died! Respawning...</div>";
+document.body.appendChild(deathScreen);
 
 function hideDeathScreen() {
   const deathScreen = document.getElementById("death-screen");

@@ -91,8 +91,9 @@ const gameConfig = {
     weaponDebugColor: "rgba(255, 255, 0, 0.4)", // Yellow semi-transparent
     sizes: {
       player: 35,
-      tree: 75,
+      tree: 70,
       stone: 65,
+      wall: 35, // Add wall collision size
     },
   },
   chat: {
@@ -101,6 +102,11 @@ const gameConfig = {
     maxMessageLength: 50,
     bubbleColor: "rgba(255, 255, 255, 0.9)",
     textColor: "#000000",
+  },
+  walls: {
+    minDistance: 70, // Minimum distance between walls
+    maxWallsPerCell: 3, // Max walls in a grid cell
+    placementBuffer: 0, // Extra space needed around walls
   },
 };
 

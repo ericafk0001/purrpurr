@@ -37,6 +37,22 @@ const gameItems = {
       cooldown: 100,
     },
   },
+  wall: {
+    id: "wall",
+    name: "Wooden Wall",
+    type: "placeable",
+    asset: "./assets/wall.png",
+    slot: 2, // default third slot
+    renderOptions: {
+      scale: 1.6,
+      offsetX: 0.32,
+      offsetY: -0.44,
+      rotationOffset: 0,
+      width: 480, // Original image width
+      height: 417, // Original image height
+      preserveRatio: true, // This will maintain aspect ratio when rendering
+    },
+  },
 };
 
 // Make items available globally in browser

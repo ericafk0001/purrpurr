@@ -28,6 +28,7 @@ config.trees.count = Math.floor(
 const players = {};
 const trees = [];
 const stones = [];
+const walls = []; // Add this line to track walls
 
 // Health system utility functions
 function damagePlayer(playerId, amount) {
@@ -348,7 +349,8 @@ io.on("connection", (socket) => {
   // Give starting items
   const startingItems = [
     { ...items.hammer, slot: 0 },
-    { ...items.apple, slot: 1 }, // Give player an apple in slot 2
+    { ...items.apple, slot: 1 },
+    { ...items.wall, slot: 2 }, // Add wall to starting inventory
   ];
 
   startingItems.forEach((item) => {
@@ -371,6 +373,7 @@ io.on("connection", (socket) => {
     }, {}),
     trees,
     stones,
+    walls, // Add this line
   });
 
   // Notify other players about new player with health info
@@ -636,6 +639,97 @@ io.on("connection", (socket) => {
           break;
       }
     }
+  });
+
+  function isValidWallPlacement(x, y) {
+    const wallRadius = config.collision.sizes.wall;
+    const minDistance = config.walls.minDistance;
+
+    // Check distance from other walls
+    for (const wall of walls) {
+      const dx = x - wall.x;
+      const dy = y - wall.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minDistance) return false;
+    }
+
+    // Check distance from trees and stones with exact collision sizes
+    const obstacles = [
+      ...trees.map((tree) => ({
+        ...tree,
+        radius: config.collision.sizes.tree,
+      })),
+      ...stones.map((stone) => ({
+        ...stone,
+        radius: config.collision.sizes.stone,
+      })),
+    ];
+
+    // Check each obstacle
+    for (const obstacle of obstacles) {
+      const dx = x - obstacle.x;
+      const dy = y - obstacle.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const minAllowedDistance =
+        wallRadius + obstacle.radius + config.walls.placementBuffer;
+
+      if (distance < minAllowedDistance) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Update the placeWall handler
+  socket.on("placeWall", (position) => {
+    const player = players[socket.id];
+    if (!player || player.isDead) return;
+
+    // Validate position is within world bounds
+    if (
+      position.x < 0 ||
+      position.x > config.worldWidth ||
+      position.y < 0 ||
+      position.y > config.worldHeight
+    )
+      return;
+
+    // Check if position is valid
+    if (!isValidWallPlacement(position.x, position.y)) return;
+
+    // Find wall in inventory
+    const wallSlot = player.inventory.slots.findIndex(
+      (item) => item?.id === "wall"
+    );
+    if (wallSlot === -1) return;
+
+    // Add wall to world
+    walls.push({
+      x: position.x,
+      y: position.y,
+      radius: config.collision.sizes.wall,
+      rotation: position.rotation || 0,
+      playerId: socket.id,
+    });
+
+    // Broadcast wall placement to all clients
+    io.emit("wallPlaced", {
+      x: position.x,
+      y: position.y,
+      rotation: position.rotation || 0,
+      playerId: socket.id,
+    });
+
+    // Switch back to hammer
+    player.inventory.activeSlot = 0;
+    player.inventory.selectedItem = player.inventory.slots[0];
+
+    // Broadcast inventory update
+    io.emit("playerInventoryUpdate", {
+      id: socket.id,
+      inventory: player.inventory,
+    });
   });
 });
 
