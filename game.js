@@ -125,6 +125,29 @@ socket.on("wallPlaced", (wallData) => {
   walls.push(wallData);
 });
 
+// Add near top with other state variables
+const wallShakes = new Map(); // Track wall shake animations
+
+socket.on("wallDamaged", (data) => {
+  const wall = walls.find((w) => w.x === data.x && w.y === data.y);
+  if (wall) {
+    wall.health = data.health;
+    // Add shake animation data
+    wallShakes.set(`${wall.x},${wall.y}`, {
+      startTime: performance.now(),
+      duration: 200, // Shake duration in ms
+      magnitude: 3, // Shake intensity
+    });
+  }
+});
+
+socket.on("wallDestroyed", (data) => {
+  const wallIndex = walls.findIndex((w) => w.x === data.x && w.y === data.y);
+  if (wallIndex !== -1) {
+    walls.splice(wallIndex, 1);
+  }
+});
+
 // Add near other socket handlers
 socket.on("playerTeleported", (data) => {
   if (players[data.playerId]) {
@@ -487,18 +510,37 @@ function drawStone(stone) {
 function drawWall(wall) {
   if (assets.wall) {
     ctx.save();
-    ctx.translate(wall.x - camera.x, wall.y - camera.y);
 
-    // Apply rotation - we add 90 degrees (PI/2) to align with player facing
-    ctx.rotate(wall.rotation + Math.PI / 2);
+    // Calculate shake offset
+    let shakeX = 0;
+    let shakeY = 0;
+    const shakeData = wallShakes.get(`${wall.x},${wall.y}`);
 
-    // Use wall dimensions from items configuration
+    if (shakeData) {
+      const elapsed = performance.now() - shakeData.startTime;
+      if (elapsed < shakeData.duration) {
+        const progress = elapsed / shakeData.duration;
+        const decay = 1 - progress; // Shake gets weaker over time
+        shakeX = (Math.random() * 2 - 1) * shakeData.magnitude * decay;
+        shakeY = (Math.random() * 2 - 1) * shakeData.magnitude * decay;
+      } else {
+        wallShakes.delete(`${wall.x},${wall.y}`);
+      }
+    }
+
+    // Apply shake to wall position
+    ctx.translate(wall.x - camera.x + shakeX, wall.y - camera.y + shakeY);
+
     const wallScale = items.wall.renderOptions.scale;
     const baseSize = 60;
     const wallWidth = baseSize * wallScale;
     const wallHeight = Math.floor(wallWidth * (417 / 480));
 
-    // Draw wall centered on its position
+    // Apply damage visual effect
+    if (wall.health < items.wall.maxHealth) {
+      ctx.globalAlpha = 0.3 + (0.7 * wall.health) / items.wall.maxHealth;
+    }
+
     ctx.drawImage(
       assets.wall,
       -wallWidth / 2,
@@ -1162,16 +1204,23 @@ function gameLoop() {
     }
   }
 
-  // Update attack animations for all players
+  // Update all players' attack animations including local player
+  const currentTime = Date.now();
   Object.values(players).forEach((player) => {
     if (player.attacking && player.attackStartTime) {
-      const elapsed = now - player.attackStartTime;
-
+      const elapsed = currentTime - player.attackStartTime;
+      
       if (elapsed <= attackDuration) {
         player.attackProgress = elapsed / attackDuration;
       } else {
         player.attacking = false;
         player.attackProgress = 0;
+      }
+
+      // For local player, handle auto-attack
+      if (player === myPlayer && !player.attacking && autoAttackEnabled && canAutoAttackWithCurrentItem()) {
+        const cooldownRemaining = items.hammer.cooldown - attackDuration;
+        setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
     }
   });
@@ -1516,8 +1565,7 @@ window.addEventListener("mousedown", (e) => {
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = true;
-    // Use local time instead of server time
-    players[data.id].attackStartTime = performance.now();
+    players[data.id].attackStartTime = Date.now(); // Use Date.now() instead of performance.now()
     players[data.id].attackProgress = 0;
   }
 });

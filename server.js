@@ -513,11 +513,11 @@ io.on("connection", (socket) => {
       startTime: now,
     });
 
-    // Process the attack after a slight delay (for animation)
-    setTimeout(() => {
-      processAttack(socket.id);
+    // Process attack immediately instead of waiting
+    processAttack(socket.id);
 
-      // End attack state
+    // End attack state after animation
+    setTimeout(() => {
       player.attacking = false;
       io.emit("playerAttackEnd", { id: socket.id });
     }, items.hammer.useTime);
@@ -540,6 +540,33 @@ io.on("connection", (socket) => {
     const playerAngle = attacker.rotation + Math.PI / 2;
     const startAngle = playerAngle - arcAngle / 2;
     const endAngle = playerAngle + arcAngle / 2;
+
+    // Process wall damage
+    walls.forEach((wall, index) => {
+      const dx = wall.x - attacker.x;
+      const dy = wall.y - attacker.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance <= attackRange + config.collision.sizes.wall) {
+        const angleToWall = Math.atan2(dy, dx);
+        const angleDiff = Math.abs(normalizeAngle(angleToWall - playerAngle));
+
+        if (angleDiff <= arcAngle / 2) {
+          wall.health -= weapon.damage || 15;
+
+          if (wall.health <= 0) {
+            walls.splice(index, 1);
+            io.emit("wallDestroyed", { x: wall.x, y: wall.y });
+          } else {
+            io.emit("wallDamaged", {
+              x: wall.x,
+              y: wall.y,
+              health: wall.health,
+            });
+          }
+        }
+      }
+    });
 
     Object.entries(players).forEach(([targetId, target]) => {
       if (targetId === attackerId) return;
@@ -606,6 +633,12 @@ io.on("connection", (socket) => {
         }
       }
     });
+  }
+
+  function normalizeAngle(angle) {
+    while (angle > Math.PI) angle -= 2 * Math.PI;
+    while (angle < -Math.PI) angle += 2 * Math.PI;
+    return angle;
   }
 
   socket.on("disconnect", () => {
@@ -704,22 +737,20 @@ io.on("connection", (socket) => {
     );
     if (wallSlot === -1) return;
 
-    // Add wall to world
-    walls.push({
+    // Add wall to world with health
+    const wall = {
       x: position.x,
       y: position.y,
       radius: config.collision.sizes.wall,
       rotation: position.rotation || 0,
       playerId: socket.id,
-    });
+      health: items.wall.maxHealth, // Add initial health
+    };
 
-    // Broadcast wall placement to all clients
-    io.emit("wallPlaced", {
-      x: position.x,
-      y: position.y,
-      rotation: position.rotation || 0,
-      playerId: socket.id,
-    });
+    walls.push(wall);
+
+    // Broadcast wall placement with health
+    io.emit("wallPlaced", wall);
 
     // Switch back to hammer
     player.inventory.activeSlot = 0;

@@ -6,8 +6,8 @@ const gameItems = {
     type: "weapon",
     damage: 10,
     range: 120,
-    cooldown: 400, // ms
-    useTime: 400, // ms for swing animation
+    cooldown: 400, // ms between attacks
+    useTime: 250, // Reduced animation time for faster feedback
     asset: "./assets/hammer.png",
     slot: 0, // default first slot
     renderOptions: {
@@ -41,6 +41,7 @@ const gameItems = {
     id: "wall",
     name: "Wooden Wall",
     type: "placeable",
+    maxHealth: 100, // Add max health for walls
     asset: "./assets/wall.png",
     slot: 2, // default third slot
     renderOptions: {
