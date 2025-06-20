@@ -292,7 +292,7 @@ function drawPlayer(player) {
     let baseRotation = player.rotation || 0;
 
     if (player.attacking && player.attackProgress !== undefined) {
-      const maxSwingAngle = (70 * Math.PI) / 180;
+      const maxSwingAngle = (110 * Math.PI) / 180;
       let swingAngle = 0;
 
       if (player.attackProgress < 0.5) {
