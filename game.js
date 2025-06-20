@@ -510,9 +510,6 @@ function drawStone(stone) {
 function drawWall(wall) {
   if (assets.wall) {
     ctx.save();
-    ctx.translate(wall.x - camera.x, wall.y - camera.y);
-    ctx.rotate(wall.rotation + Math.PI / 2);
-
     // Calculate shake offset
     let shakeX = 0;
     let shakeY = 0;
@@ -528,10 +525,9 @@ function drawWall(wall) {
       } else {
         wallShakes.delete(`${wall.x},${wall.y}`);
       }
-    }
-
-    // Apply shake to wall position
+    } // Apply position, rotation and shake in a single translation
     ctx.translate(wall.x - camera.x + shakeX, wall.y - camera.y + shakeY);
+    ctx.rotate(wall.rotation || 0); // Use wall's stored rotation
 
     const wallScale = items.wall.renderOptions.scale;
     const baseSize = 60;
@@ -1168,34 +1164,48 @@ function toggleAutoAttack() {
   }
 }
 
-// Modify this function to handle auto-attacking
-function gameLoop() {
-  const now = performance.now();
-  const elapsed = now - lastFrameTime;
-  lastFrameTime = now;
+// Add near top with other constants
+const TARGET_FPS = 60;
+const FRAME_TIME = 1000 / TARGET_FPS;
+let lastFrameTimestamp = 0;
+
+// Modify gameLoop function
+function gameLoop(timestamp) {
+  // Limit FPS
+  if (timestamp - lastFrameTimestamp < FRAME_TIME) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  const frameTime = performance.now();
+  const frameDelta = frameTime - lastFrameTime;
+  lastFrameTime = frameTime;
+  lastFrameTimestamp = timestamp;
   frameCount++;
 
   // Update FPS counter at intervals
-  if (now - lastFpsUpdate > FPS_UPDATE_INTERVAL) {
-    currentFps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+  if (frameTime - lastFpsUpdate > FPS_UPDATE_INTERVAL) {
+    currentFps = Math.round((frameCount * 1000) / (frameTime - lastFpsUpdate));
     frameCount = 0;
-    lastFpsUpdate = now;
+    lastFpsUpdate = frameTime;
   }
 
   // Update attack animation
   if (isAttacking && myPlayer) {
-    const now = Date.now();
-    const elapsed = now - lastAttackTime;
+    const attackTime = Date.now();
+    const attackElapsed = attackTime - lastAttackTime;
 
-    if (elapsed <= attackDuration) {
+    if (attackElapsed <= attackDuration) {
       // Update animation progress
-      attackAnimationProgress = elapsed / attackDuration;
+      attackAnimationProgress = Math.min(1, attackElapsed / attackDuration);
       myPlayer.attackProgress = attackAnimationProgress;
+      myPlayer.attackStartTime = lastAttackTime;
     } else {
       // End attack animation
       isAttacking = false;
       myPlayer.attacking = false;
       myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = null;
 
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
@@ -1207,27 +1217,35 @@ function gameLoop() {
   }
 
   // Update all players' attack animations including local player
-  const serverTime = Date.now(); // Use same time reference as server
+  const animTime = Date.now();
   Object.values(players).forEach((player) => {
-    if (player.attacking && player.attackStartTime) {
-      const elapsed = serverTime - player.attackStartTime;
+    // Skip players without attack state
+    if (!player.attacking || !player.attackStartTime) return;
 
-      if (elapsed <= attackDuration) {
-        player.attackProgress = elapsed / attackDuration;
-      } else {
+    const elapsed = animTime - player.attackStartTime;
+
+    // Handle animation state
+    if (elapsed <= attackDuration) {
+      player.attackProgress = Math.min(1, elapsed / attackDuration);
+    } else {
+      // Only end animation locally if:
+      // 1. This is the local player (we control our own state)
+      // 2. Enough time has passed since animation started (avoid early termination)
+      if (player === myPlayer || elapsed > attackDuration + 100) {
         player.attacking = false;
         player.attackProgress = 0;
-      }
+        player.attackStartTime = null;
 
-      // For local player, handle auto-attack
-      if (
-        player === myPlayer &&
-        !player.attacking &&
-        autoAttackEnabled &&
-        canAutoAttackWithCurrentItem()
-      ) {
-        const cooldownRemaining = items.hammer.cooldown - attackDuration;
-        setTimeout(startAttack, Math.max(0, cooldownRemaining));
+        // For local player only, handle auto-attack
+        if (
+          player === myPlayer &&
+          autoAttackEnabled &&
+          canAutoAttackWithCurrentItem()
+        ) {
+          const cooldownRemaining =
+            (items.hammer.cooldown || 800) - attackDuration;
+          setTimeout(startAttack, Math.max(0, cooldownRemaining));
+        }
       }
     }
   });
@@ -1532,7 +1550,7 @@ function drawPlayers() {
 
 loadAssets();
 
-gameLoop();
+requestAnimationFrame(gameLoop);
 
 // Add mouse click handler for attacks
 window.addEventListener("mousedown", (e) => {
@@ -1545,16 +1563,14 @@ window.addEventListener("mousedown", (e) => {
       useItem(myPlayer.inventory.activeSlot);
     } else if (activeItem.type === "placeable") {
       // Calculate wall position in front of player
-      const wallDistance = 79; // Distance from player center
+      const wallDistance = 69; // Distance from player center
       const angle = myPlayer.rotation + Math.PI / 2; // Player's facing angle
       const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
-      const wallY = myPlayer.y + Math.sin(angle) * wallDistance;
-
-      // Request wall placement from server
+      const wallY = myPlayer.y + Math.sin(angle) * wallDistance; // Request wall placement from server - rotate wall 90 degrees to match player orientation
       socket.emit("placeWall", {
         x: wallX,
         y: wallY,
-        rotation: myPlayer.rotation, // Use player's rotation for wall orientation
+        rotation: myPlayer.rotation + Math.PI / 2, // Rotate wall 90 degrees to match player orientation
       });
 
       // Switch back to hammer
@@ -1571,8 +1587,10 @@ window.addEventListener("mousedown", (e) => {
 // Add socket listeners for attack events
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
+    // Use server timestamp if provided, otherwise use current time
+    const startTime = data.timestamp || Date.now();
     players[data.id].attacking = true;
-    players[data.id].attackStartTime = data.startTime; // Use server timestamp
+    players[data.id].attackStartTime = startTime;
     players[data.id].attackProgress = 0;
   }
 });
