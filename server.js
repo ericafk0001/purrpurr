@@ -518,8 +518,10 @@ io.on("connection", (socket) => {
 
     // End attack state after animation
     setTimeout(() => {
-      player.attacking = false;
-      io.emit("playerAttackEnd", { id: socket.id });
+      if (player.attacking) {
+        player.attacking = false;
+        io.emit("playerAttackEnd", { id: socket.id });
+      }
     }, items.hammer.useTime);
   });
 
@@ -800,6 +802,21 @@ io.on("connection", (socket) => {
         playerId: socket.id,
         x: player.x,
         y: player.y,
+      });
+    }
+  });
+
+  socket.on("attackAnimationUpdate", (data) => {
+    if (players[socket.id]) {
+      players[socket.id].attacking = data.attacking;
+      players[socket.id].attackProgress = data.progress;
+      players[socket.id].attackStartTime = data.startTime;
+      players[socket.id].rotation = data.rotation;
+
+      // Broadcast animation update to other players
+      socket.broadcast.emit("attackAnimationUpdate", {
+        id: socket.id,
+        ...data,
       });
     }
   });

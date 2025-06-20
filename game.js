@@ -1116,27 +1116,30 @@ function useItem(slot) {
 
 // Modify startAttack function
 function startAttack() {
-  if (!canAutoAttackWithCurrentItem()) {
-    // Don't disable auto-attack when switching to non-weapon,
-    // just don't perform the attack
-    return;
-  }
+  if (!canAutoAttackWithCurrentItem()) return;
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
 
-  // Only start attack if we're not in cooldown
   if (now - lastAttackTime > cooldown) {
     isAttacking = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
 
-    socket.emit("attackStart");
-
     if (myPlayer) {
       myPlayer.attacking = true;
       myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = now;
+
+      socket.emit("attackAnimationUpdate", {
+        attacking: true,
+        progress: 0,
+        startTime: now,
+        rotation: myPlayer.rotation,
+      });
     }
+
+    socket.emit("attackStart");
   }
 }
 
@@ -1212,34 +1215,29 @@ function gameLoop(timestamp) {
   // Update all players' attack animations including local player
   const animTime = Date.now();
   Object.values(players).forEach((player) => {
-    // Skip players without attack state
     if (!player.attacking || !player.attackStartTime) return;
 
     const elapsed = animTime - player.attackStartTime;
+    const attackDuration = items.hammer.useTime || 400;
 
-    // Handle animation state
+    // Update animation progress
     if (elapsed <= attackDuration) {
       player.attackProgress = Math.min(1, elapsed / attackDuration);
     } else {
-      // Only end animation locally if:
-      // 1. This is the local player (we control our own state)
-      // 2. Enough time has passed since animation started (avoid early termination)
-      if (player === myPlayer || elapsed > attackDuration + 100) {
-        player.attacking = false;
-        player.attackProgress = 0;
-        player.attackStartTime = null;
+      // End animation
+      player.attacking = false;
+      player.attackProgress = 0;
+      player.attackStartTime = null;
+    }
 
-        // For local player only, handle auto-attack
-        if (
-          player === myPlayer &&
-          autoAttackEnabled &&
-          canAutoAttackWithCurrentItem()
-        ) {
-          const cooldownRemaining =
-            (items.hammer.cooldown || 800) - attackDuration;
-          setTimeout(startAttack, Math.max(0, cooldownRemaining));
-        }
-      }
+    // For local player, emit animation updates
+    if (player === myPlayer) {
+      socket.emit("attackAnimationUpdate", {
+        attacking: player.attacking,
+        progress: player.attackProgress,
+        startTime: player.attackStartTime,
+        rotation: player.rotation,
+      });
     }
   });
 
@@ -1274,32 +1272,36 @@ function canAutoAttackWithCurrentItem() {
 
 // Modify startAttack function
 function startAttack() {
-  if (!canAutoAttackWithCurrentItem()) {
-    // Don't disable auto-attack when switching to non-weapon,
-    // just don't perform the attack
-    return;
-  }
+  if (!canAutoAttackWithCurrentItem()) return;
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
 
-  // Only start attack if we're not in cooldown
   if (now - lastAttackTime > cooldown) {
     isAttacking = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
 
-    socket.emit("attackStart");
-
     if (myPlayer) {
       myPlayer.attacking = true;
       myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = now;
+
+      socket.emit("attackAnimationUpdate", {
+        attacking: true,
+        progress: 0,
+        startTime: now,
+        rotation: myPlayer.rotation,
+      });
     }
+
+    socket.emit("attackStart");
   }
 }
 
 // Add to event listeners section for number keys 1-5 and Q
-window.addEventListener("keydown", (e) => {  if (e.key === "Enter") {
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
     if (!chatMode) {
       // enter chat mode
       chatMode = true;
@@ -1332,7 +1334,8 @@ window.addEventListener("keydown", (e) => {  if (e.key === "Enter") {
       chatInput = chatInput.slice(0, -1);
     } else if (e.key.length === 1) {
       chatInput += e.key;
-    }    return;
+    }
+    return;
   }
 
   // Don't process any other keys when in chat mode
@@ -1593,6 +1596,15 @@ socket.on("playerAttackStart", (data) => {
 socket.on("playerAttackEnd", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = false;
+  }
+});
+
+socket.on("attackAnimationUpdate", (data) => {
+  if (players[data.id]) {
+    players[data.id].attacking = data.attacking;
+    players[data.id].attackProgress = data.progress;
+    players[data.id].attackStartTime = data.startTime;
+    players[data.id].rotation = data.rotation;
   }
 });
 
