@@ -79,6 +79,10 @@ const gameConfig = {
         textColor: "#999999", // Default text color for slot items
       },
     },
+    spawnConfig: {
+      minDistanceFromWalls: 100, // Minimum distance from walls when spawning
+      maxSpawnAttempts: 10, // Maximum attempts to find valid spawn position
+    },
   },
   collision: {
     enabled: true,

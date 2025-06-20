@@ -332,14 +332,50 @@ app.get("/last-modified", (req, res) => {
 generateTrees();
 generateStones();
 
+function findValidSpawnPosition() {
+  let attempts = 0;
+  const maxAttempts = config.player.spawnConfig.maxSpawnAttempts;
+  const minDistFromWalls = config.player.spawnConfig.minDistanceFromWalls;
+
+  while (attempts < maxAttempts) {
+    const x = Math.random() * (config.worldWidth - 200) + 100;
+    const y = Math.random() * (config.worldHeight - 200) + 100;
+
+    // Check distance from walls
+    let tooCloseToWall = false;
+    for (const wall of walls) {
+      const dx = x - wall.x;
+      const dy = y - wall.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minDistFromWalls) {
+        tooCloseToWall = true;
+        break;
+      }
+    }
+
+    if (!tooCloseToWall) {
+      return { x, y };
+    }
+
+    attempts++;
+  }
+
+  // If no valid position found after max attempts, return a fallback position
+  return {
+    x: config.worldWidth / 2,
+    y: config.worldHeight / 2,
+  };
+}
+
+// Update the socket connection handler to use the new spawn function
 io.on("connection", (socket) => {
+  const spawnPos = findValidSpawnPosition();
   console.log("A player connected:", socket.id);
-  const spawnPoint = findSafeSpawnPoint();
 
   // Initialize player with health and inventory
   players[socket.id] = {
-    x: spawnPoint.x,
-    y: spawnPoint.y,
+    x: spawnPos.x,
+    y: spawnPos.y,
     rotation: 0,
     health: config.player.health.max,
     lastDamageTime: null,
@@ -384,8 +420,8 @@ io.on("connection", (socket) => {
   // Notify other players about new player with health info
   socket.broadcast.emit("newPlayer", {
     id: socket.id,
-    x: spawnPoint.x,
-    y: spawnPoint.y,
+    x: spawnPos.x,
+    y: spawnPos.y,
     health: config.player.health.max,
     maxHealth: config.player.health.max,
     inventory: players[socket.id].inventory,
