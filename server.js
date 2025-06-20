@@ -58,6 +58,11 @@ function healPlayer(playerId, amount) {
   const player = players[playerId];
   if (!player) return false;
 
+  // Check if player is already at full health
+  if (player.health >= config.player.health.max) return false;
+
+  // Apply healing with max health cap
+  const oldHealth = player.health;
   player.health = Math.min(config.player.health.max, player.health + amount);
 
   // Broadcast health update
@@ -68,7 +73,7 @@ function healPlayer(playerId, amount) {
     timestamp: Date.now(),
   });
 
-  return true;
+  return player.health > oldHealth; // Return true if any healing was applied
 }
 
 // Enhanced player death handling
@@ -661,15 +666,14 @@ io.on("connection", (socket) => {
     if (item.type === "consumable") {
       switch (item.id) {
         case "apple":
-          healPlayer(socket.id, item.healAmount);
-          // Remove this line to keep the apple:
-          // player.inventory.slots[data.slot] = null;
+          const didHeal = healPlayer(socket.id, item.healAmount);
 
-          // Update clients about heal effect (optional)
+          // Send appropriate response based on whether healing occurred
           io.emit("itemUsed", {
             id: socket.id,
             slot: data.slot,
             itemId: item.id,
+            success: didHeal,
           });
           break;
       }

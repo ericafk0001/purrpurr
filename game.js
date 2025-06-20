@@ -123,6 +123,11 @@ socket.on("initGame", (gameState) => {
 // Add new socket handler for wall placement
 socket.on("wallPlaced", (wallData) => {
   walls.push(wallData);
+
+  // Switch back to hammer only if this was our wall
+  if (wallData.playerId === socket.id) {
+    handleInventorySelection(0);
+  }
 });
 
 // Add near top with other state variables
@@ -750,9 +755,9 @@ function updatePosition() {
 
   if (newX > 0 && newX < config.worldWidth) myPlayer.x = newX;
   if (newY > 0 && newY < config.worldHeight) myPlayer.y = newY;
-
   resolvePlayerCollisions();
   resolveCollisionPenetration();
+  resolveWallCollisions(); // Add wall collision resolution
 
   socket.emit("playerMovement", {
     x: myPlayer.x,
@@ -770,22 +775,19 @@ function resolveCollisionPenetration() {
     radius: config.collision.sizes.player,
   };
 
-  // Include walls in static obstacles for penetration resolution
+  // Trees and stones are static obstacles
   const staticObstacles = [
     ...trees.map((tree) => ({
       x: tree.x,
       y: tree.y,
       radius: config.collision.sizes.tree,
+      type: "tree",
     })),
     ...stones.map((stone) => ({
       x: stone.x,
       y: stone.y,
       radius: config.collision.sizes.stone,
-    })),
-    ...walls.map((wall) => ({
-      x: wall.x,
-      y: wall.y,
-      radius: config.collision.sizes.wall,
+      type: "stone",
     })),
   ];
 
@@ -1097,8 +1099,8 @@ function handleInventorySelection(index) {
 
 // Add item use event handler after other socket handlers
 socket.on("itemUsed", (data) => {
-  if (data.id === socket.id && data.itemId === "apple") {
-    // Switch back to hammer (slot 0) after using apple
+  if (data.id === socket.id && data.itemId === "apple" && data.success) {
+    // Only switch back to hammer if healing was successful
     handleInventorySelection(0);
   }
 });
@@ -1570,9 +1572,6 @@ window.addEventListener("mousedown", (e) => {
         y: wallY,
         rotation: myPlayer.rotation + Math.PI / 2, // Rotate wall 90 degrees to match player orientation
       });
-
-      // Switch back to hammer
-      handleInventorySelection(0);
     } else {
       startAttack();
     }
@@ -1744,4 +1743,45 @@ function hideDeathScreen() {
   if (deathScreen) {
     document.body.removeChild(deathScreen);
   }
+}
+
+// Add after resolvePlayerCollisions function
+function resolveWallCollisions() {
+  if (!myPlayer) return;
+
+  const playerCircle = {
+    x: myPlayer.x,
+    y: myPlayer.y,
+    radius: config.collision.sizes.player,
+  };
+
+  // Handle wall collisions separately with push behavior
+  walls.forEach((wall) => {
+    const dx = playerCircle.x - wall.x;
+    const dy = playerCircle.y - wall.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const minDist = playerCircle.radius + config.collision.sizes.wall;
+
+    if (distance < minDist && distance > 0) {
+      // Calculate overlap and create a push force
+      const overlap = minDist - distance;
+      const pushForce = Math.min(overlap * 0.5, config.moveSpeed);
+      const dampingFactor = 0.8;
+
+      // Normalize direction and apply push force
+      const pushX = (dx / distance) * pushForce * dampingFactor;
+      const pushY = (dy / distance) * pushForce * dampingFactor;
+
+      // Apply the push to move player out of wall
+      myPlayer.x += pushX;
+      myPlayer.y += pushY;
+
+      // Add small random jitter to help unstuck
+      if (distance < minDist * 0.5) {
+        const jitter = 0.5;
+        myPlayer.x += (Math.random() - 0.5) * jitter;
+        myPlayer.y += (Math.random() - 0.5) * jitter;
+      }
+    }
+  });
 }
