@@ -1122,8 +1122,19 @@ function startAttack() {
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
+  lastAttackAttempt = now; // Record the attempt time
 
-  if (now - lastAttackTime > cooldown) {
+  // Check if we're in cooldown
+  const timeSinceLastAttack = now - lastAttackTime;
+
+  // Allow attack if either:
+  // 1. Cooldown is completely finished, or
+  // 2. We're within buffer window and have a recent attack attempt
+  if (
+    timeSinceLastAttack > cooldown ||
+    (timeSinceLastAttack > cooldown - ATTACK_BUFFER_WINDOW &&
+      lastAttackAttempt > lastAttackTime)
+  ) {
     isAttacking = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
@@ -1278,8 +1289,19 @@ function startAttack() {
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
+  lastAttackAttempt = now; // Record the attempt time
 
-  if (now - lastAttackTime > cooldown) {
+  // Check if we're in cooldown
+  const timeSinceLastAttack = now - lastAttackTime;
+
+  // Allow attack if either:
+  // 1. Cooldown is completely finished, or
+  // 2. We're within buffer window and have a recent attack attempt
+  if (
+    timeSinceLastAttack > cooldown ||
+    (timeSinceLastAttack > cooldown - ATTACK_BUFFER_WINDOW &&
+      lastAttackAttempt > lastAttackTime)
+  ) {
     isAttacking = true;
     lastAttackTime = now;
     attackAnimationProgress = 0;
@@ -1785,3 +1807,7 @@ function resolveWallCollisions() {
     }
   });
 }
+
+// Add near the top with other state variables
+const ATTACK_BUFFER_WINDOW = 200; // Buffer window in milliseconds
+let lastAttackAttempt = 0;
