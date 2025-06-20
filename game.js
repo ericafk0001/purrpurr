@@ -1209,7 +1209,7 @@ function gameLoop() {
   Object.values(players).forEach((player) => {
     if (player.attacking && player.attackStartTime) {
       const elapsed = currentTime - player.attackStartTime;
-      
+
       if (elapsed <= attackDuration) {
         player.attackProgress = elapsed / attackDuration;
       } else {
@@ -1218,7 +1218,12 @@ function gameLoop() {
       }
 
       // For local player, handle auto-attack
-      if (player === myPlayer && !player.attacking && autoAttackEnabled && canAutoAttackWithCurrentItem()) {
+      if (
+        player === myPlayer &&
+        !player.attacking &&
+        autoAttackEnabled &&
+        canAutoAttackWithCurrentItem()
+      ) {
         const cooldownRemaining = items.hammer.cooldown - attackDuration;
         setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
