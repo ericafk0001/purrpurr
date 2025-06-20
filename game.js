@@ -952,15 +952,8 @@ function drawCollisionCircles() {
   }
 }
 
-// Add a keyboard shortcut to toggle weapon debug
+// Add key handler
 window.addEventListener("keydown", (e) => {
-  // ...existing code...
-
-  // Add debug toggle for weapon collision
-  if (e.key.toLowerCase() === "o") {
-    config.collision.weaponDebug = !config.collision.weaponDebug;
-  }
-
   // ...existing code...
 });
 
@@ -1306,14 +1299,7 @@ function startAttack() {
 }
 
 // Add to event listeners section for number keys 1-5 and Q
-window.addEventListener("keydown", (e) => {
-  // Handle debug panel toggle regardless of chat mode
-  if (e.key === ";") {
-    debugPanelVisible = !debugPanelVisible;
-    return;
-  }
-
-  if (e.key === "Enter") {
+window.addEventListener("keydown", (e) => {  if (e.key === "Enter") {
     if (!chatMode) {
       // enter chat mode
       chatMode = true;
@@ -1346,18 +1332,29 @@ window.addEventListener("keydown", (e) => {
       chatInput = chatInput.slice(0, -1);
     } else if (e.key.length === 1) {
       chatInput += e.key;
-    }
-    return; // don't process movement keys while chatting
+    }    return;
   }
 
-  // existing movement key handling
+  // Don't process any other keys when in chat mode
+  if (chatMode) return;
+
+  // Movement keys
   if (keys.hasOwnProperty(e.key.toLowerCase())) {
     keys[e.key.toLowerCase()] = true;
   }
 
-  // add debug toggle
-  if (e.key === "p") {
+  // Toggle debug panel
+  if (e.key === ";") {
+    debugPanelVisible = !debugPanelVisible;
+  }
+  // Toggle debug collision display
+  if (e.key === "p" && debugPanelVisible) {
     config.collision.debug = !config.collision.debug;
+  }
+
+  // Toggle weapon debug - only works when debug panel is open
+  if (e.key.toLowerCase() === "o" && debugPanelVisible) {
+    config.collision.weaponDebug = !config.collision.weaponDebug;
   }
 
   // Number keys for inventory selection (1-5)
@@ -1367,7 +1364,7 @@ window.addEventListener("keydown", (e) => {
   }
 
   // Quick select apple with Q
-  if (e.key.toLowerCase() === "q" && !chatMode) {
+  if (e.key.toLowerCase() === "q") {
     // Find first apple slot
     const appleSlot = myPlayer?.inventory?.slots.findIndex(
       (item) => item?.id === "apple"
@@ -1376,13 +1373,11 @@ window.addEventListener("keydown", (e) => {
       handleInventorySelection(appleSlot);
     }
   }
-
-  if (e.key.toLowerCase() === "e" && !chatMode) {
+  if (e.key.toLowerCase() === "e") {
     toggleAutoAttack();
   }
-
-  // Add teleport key (T)
-  if (e.key.toLowerCase() === "t" && !chatMode) {
+  // Add teleport key (T) - only works when debug panel is open
+  if (e.key.toLowerCase() === "t" && !chatMode && debugPanelVisible) {
     socket.emit("teleportRequest");
   }
 });
