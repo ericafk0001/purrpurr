@@ -51,6 +51,9 @@ const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
 ctx.imageSmoothingEnabled = true;
 ctx.imageSmoothingQuality = "high";
 
+const ATTACK_BUFFER_WINDOW = 200; // Buffer window in milliseconds
+let lastAttackAttempt = 0;
+
 // Modify loadAssets function to include apple
 function loadAssets() {
   Object.keys(config.assets).forEach((key) => {
@@ -1807,7 +1810,3 @@ function resolveWallCollisions() {
     }
   });
 }
-
-// Add near the top with other state variables
-const ATTACK_BUFFER_WINDOW = 200; // Buffer window in milliseconds
-let lastAttackAttempt = 0;
