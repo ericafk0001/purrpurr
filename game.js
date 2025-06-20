@@ -510,6 +510,8 @@ function drawStone(stone) {
 function drawWall(wall) {
   if (assets.wall) {
     ctx.save();
+    ctx.translate(wall.x - camera.x, wall.y - camera.y);
+    ctx.rotate(wall.rotation + Math.PI / 2);
 
     // Calculate shake offset
     let shakeX = 0;
@@ -1205,10 +1207,10 @@ function gameLoop() {
   }
 
   // Update all players' attack animations including local player
-  const currentTime = Date.now();
+  const serverTime = Date.now(); // Use same time reference as server
   Object.values(players).forEach((player) => {
     if (player.attacking && player.attackStartTime) {
-      const elapsed = currentTime - player.attackStartTime;
+      const elapsed = serverTime - player.attackStartTime;
 
       if (elapsed <= attackDuration) {
         player.attackProgress = elapsed / attackDuration;
@@ -1570,7 +1572,7 @@ window.addEventListener("mousedown", (e) => {
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = true;
-    players[data.id].attackStartTime = Date.now(); // Use Date.now() instead of performance.now()
+    players[data.id].attackStartTime = data.startTime; // Use server timestamp
     players[data.id].attackProgress = 0;
   }
 });
