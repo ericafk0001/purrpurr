@@ -7,7 +7,7 @@ const ctx = canvas.getContext("2d");
 const socket = io(
   location.hostname === "localhost"
     ? "http://localhost:3000"
-    : "https://purrpurr-server.onrender.com"
+    : "https://purrpurr.onrender.com"
 );
 
 // Use the global gameItems instead of require
@@ -103,9 +103,10 @@ socket.on("playerMoved", (playerInfo) => {
     players[playerInfo.id] = {
       ...playerInfo,
       inventory: playerInfo.inventory || player.inventory,
-      attacking: playerInfo.attacking,
-      attackProgress: playerInfo.attackProgress,
-      attackStartTime: playerInfo.attackStartTime,
+      attacking: player.attacking, // Preserve local attack state
+      attackProgress: player.attackProgress,
+      attackStartTime: player.attackStartTime,
+      attackStartRotation: player.attackStartRotation, // Preserve attack rotation
     };
   }
 });
@@ -298,6 +299,9 @@ function drawPlayer(player) {
       const maxSwingAngle = (110 * Math.PI) / 180;
       let swingAngle = 0;
 
+      // Use the rotation from when the attack started for consistent direction
+      const attackRotation = player.attackStartRotation !== undefined ? player.attackStartRotation : baseRotation;
+      
       if (player.attackProgress < 0.5) {
         swingAngle = -(player.attackProgress / 0.5) * maxSwingAngle;
       } else {
@@ -305,7 +309,9 @@ function drawPlayer(player) {
           -maxSwingAngle +
           ((player.attackProgress - 0.5) / 0.5) * maxSwingAngle;
       }
-      baseRotation += swingAngle;
+      
+      // Apply swing to the attack start rotation, not current rotation
+      baseRotation = attackRotation + swingAngle;
     }
 
     ctx.rotate(baseRotation);
@@ -1146,13 +1152,8 @@ function startAttack() {
       myPlayer.attacking = true;
       myPlayer.attackProgress = 0;
       myPlayer.attackStartTime = now;
-
-      socket.emit("attackAnimationUpdate", {
-        attacking: true,
-        progress: 0,
-        startTime: now,
-        rotation: myPlayer.rotation,
-      });
+      // Capture the rotation at attack start for consistent animation
+      myPlayer.attackStartRotation = myPlayer.rotation;
     }
 
     socket.emit("attackStart");
@@ -1218,6 +1219,7 @@ function gameLoop(timestamp) {
       myPlayer.attacking = false;
       myPlayer.attackProgress = 0;
       myPlayer.attackStartTime = null;
+      myPlayer.attackStartRotation = null;
 
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
@@ -1244,16 +1246,7 @@ function gameLoop(timestamp) {
       player.attacking = false;
       player.attackProgress = 0;
       player.attackStartTime = null;
-    }
-
-    // For local player, emit animation updates
-    if (player === myPlayer) {
-      socket.emit("attackAnimationUpdate", {
-        attacking: player.attacking,
-        progress: player.attackProgress,
-        startTime: player.attackStartTime,
-        rotation: player.rotation,
-      });
+      player.attackStartRotation = null;
     }
   });
 
@@ -1284,46 +1277,6 @@ function canAutoAttackWithCurrentItem() {
   // List of items that support auto-attack
   const autoAttackableItems = ["hammer"];
   return autoAttackableItems.includes(activeItem.id);
-}
-
-// Modify startAttack function
-function startAttack() {
-  if (!canAutoAttackWithCurrentItem()) return;
-
-  const now = Date.now();
-  const cooldown = items.hammer.cooldown || 800;
-  lastAttackAttempt = now; // Record the attempt time
-
-  // Check if we're in cooldown
-  const timeSinceLastAttack = now - lastAttackTime;
-
-  // Allow attack if either:
-  // 1. Cooldown is completely finished, or
-  // 2. We're within buffer window and have a recent attack attempt
-  if (
-    timeSinceLastAttack > cooldown ||
-    (timeSinceLastAttack > cooldown - ATTACK_BUFFER_WINDOW &&
-      lastAttackAttempt > lastAttackTime)
-  ) {
-    isAttacking = true;
-    lastAttackTime = now;
-    attackAnimationProgress = 0;
-
-    if (myPlayer) {
-      myPlayer.attacking = true;
-      myPlayer.attackProgress = 0;
-      myPlayer.attackStartTime = now;
-
-      socket.emit("attackAnimationUpdate", {
-        attacking: true,
-        progress: 0,
-        startTime: now,
-        rotation: myPlayer.rotation,
-      });
-    }
-
-    socket.emit("attackStart");
-  }
 }
 
 // Add to event listeners section for number keys 1-5 and Q
@@ -1609,26 +1562,23 @@ window.addEventListener("mousedown", (e) => {
 // Add socket listeners for attack events
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
-    // Use server timestamp if provided, otherwise use current time
-    const startTime = data.timestamp || Date.now();
+    // Always use server timestamp for consistency
+    const startTime = data.startTime || Date.now();
     players[data.id].attacking = true;
     players[data.id].attackStartTime = startTime;
     players[data.id].attackProgress = 0;
+    
+    // Use the rotation from the server for consistent animation direction
+    players[data.id].attackStartRotation = data.rotation !== undefined ? data.rotation : players[data.id].rotation;
   }
 });
 
 socket.on("playerAttackEnd", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = false;
-  }
-});
-
-socket.on("attackAnimationUpdate", (data) => {
-  if (players[data.id]) {
-    players[data.id].attacking = data.attacking;
-    players[data.id].attackProgress = data.progress;
-    players[data.id].attackStartTime = data.startTime;
-    players[data.id].rotation = data.rotation;
+    players[data.id].attackProgress = 0;
+    players[data.id].attackStartTime = null;
+    players[data.id].attackStartRotation = null;
   }
 });
 
@@ -1706,6 +1656,8 @@ socket.on("fullStateSync", (data) => {
       // Keep local animation state
       const attackState = players[id].attacking;
       const attackProgress = players[id].attackProgress;
+      const attackStartTime = players[id].attackStartTime;
+      const attackStartRotation = players[id].attackStartRotation;
 
       // Update with server data
       players[id] = {
@@ -1713,6 +1665,8 @@ socket.on("fullStateSync", (data) => {
         // Preserve animation state
         attacking: attackState,
         attackProgress: attackProgress,
+        attackStartTime: attackStartTime,
+        attackStartRotation: attackStartRotation,
       };
     } else {
       // New player

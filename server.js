@@ -548,10 +548,11 @@ io.on("connection", (socket) => {
     player.lastAttackTime = now;
     player.attackProgress = 0;
 
-    // Broadcast attack start with timing info
+    // Broadcast attack start with timing info and rotation
     io.emit("playerAttackStart", {
       id: socket.id,
       startTime: now,
+      rotation: player.rotation, // Include rotation for consistent animation direction
     });
 
     // Process attack immediately instead of waiting
