@@ -906,58 +906,6 @@ io.on("connection", (socket) => {
   });
 });
 
-const TICK_RATE = 60; // Server ticks per second
-const TICK_INTERVAL = 1000 / TICK_RATE;
-let lastTickTime = Date.now();
-
-// Add before server.listen
-function serverTick() {
-  const now = Date.now();
-  const delta = now - lastTickTime;
-
-  // Process all players
-  Object.entries(players).forEach(([id, player]) => {
-    if (!player || player.isDead) return;
-
-    // Apply velocity decay with knockback configuration
-    if (player.lastKnockbackTime) {
-      const elapsed = now - player.lastKnockbackTime;
-      if (elapsed < config.player.knockback.duration) {
-        player.velocity.x *= player.knockbackDecay;
-        player.velocity.y *= player.knockbackDecay;
-      } else {
-        player.velocity.x = 0;
-        player.velocity.y = 0;
-        player.lastKnockbackTime = null;
-      }
-    }
-
-    // Apply velocity to position
-    if (player.velocity.x !== 0 || player.velocity.y !== 0) {
-      player.x += player.velocity.x;
-      player.y += player.velocity.y;
-      player.x = Math.max(0, Math.min(config.worldWidth, player.x));
-      player.y = Math.max(0, Math.min(config.worldHeight, player.y));
-
-      // Broadcast position update
-      io.emit("playerMoved", {
-        id: id,
-        x: player.x,
-        y: player.y,
-        rotation: player.rotation,
-        velocity: player.velocity,
-        health: player.health,
-        maxHealth: config.player.health.max,
-      });
-    }
-  });
-
-  lastTickTime = now;
-}
-
-// Start server tick loop before starting server
-setInterval(serverTick, TICK_INTERVAL);
-
 server.listen(3000, () => {
   console.log("Listening on port 3000");
 });

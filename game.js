@@ -83,11 +83,11 @@ const assets = {
 };
 
 // Add FPS tracking variables
-const FPS_UPDATE_INTERVAL = 1000;
+let lastFrameTime = performance.now();
 let frameCount = 0;
 let currentFps = 0;
 let lastFpsUpdate = 0;
-let lastFrameTime = performance.now();
+const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
 
 // enable image smoothing
 ctx.imageSmoothingEnabled = true;
@@ -1309,11 +1309,23 @@ function toggleAutoAttack() {
   }
 }
 
-// Modify gameLoop function to use time-based updates
+// Add near top with other constants
+const TARGET_FPS = 60;
+const FRAME_TIME = 1000 / TARGET_FPS;
+let lastFrameTimestamp = 0;
+
+// Modify gameLoop function
 function gameLoop(timestamp) {
+  // Limit FPS
+  if (timestamp - lastFrameTimestamp < FRAME_TIME) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   const frameTime = performance.now();
   const frameDelta = frameTime - lastFrameTime;
   lastFrameTime = frameTime;
+  lastFrameTimestamp = timestamp;
   frameCount++;
 
   // Update FPS counter at intervals
