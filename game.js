@@ -7,7 +7,7 @@ const ctx = canvas.getContext("2d");
 const socket = io(
   location.hostname === "localhost"
     ? "http://localhost:3000"
-    : "https://purrpurr.onrender.com"
+    : "https://purrpurr-server.onrender.com"
 );
 
 // Use the global gameItems instead of require
