@@ -462,8 +462,25 @@ io.on("connection", (socket) => {
   socket.on("playerMovement", (movement) => {
     const player = players[socket.id];
     if (player && !player.isDead) {
-      // Allow for some prediction error
-      const maxSpeed = config.moveSpeed * 2; // More lenient speed check
+      // Apply velocity decay with knockback configuration
+      if (player.lastKnockbackTime) {
+        const elapsed = Date.now() - player.lastKnockbackTime;
+        if (elapsed < config.player.knockback.duration) {
+          player.velocity.x *= player.knockbackDecay;
+          player.velocity.y *= player.knockbackDecay;
+        } else {
+          player.velocity.x = 0;
+          player.velocity.y = 0;
+          player.lastKnockbackTime = null;
+        }
+      }
+
+      // Apply velocity to position
+      player.x += player.velocity.x;
+      player.y += player.velocity.y;
+
+      // Then handle normal movement
+      const maxSpeed = config.moveSpeed * 1.5;
       const dx = movement.x - player.x;
       const dy = movement.y - player.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -477,9 +494,22 @@ io.on("connection", (socket) => {
         player.x = Math.max(0, Math.min(config.worldWidth, player.x));
         player.y = Math.max(0, Math.min(config.worldHeight, player.y));
 
-        // No need to broadcast here since server tick handles it
+        // Broadcast position update with health info and velocity
+        socket.broadcast.emit("playerMoved", {
+          id: socket.id,
+          x: player.x,
+          y: player.y,
+          rotation: player.rotation,
+          inventory: player.inventory,
+          attacking: player.attacking,
+          attackProgress: player.attackProgress,
+          attackStartTime: player.attackStartTime,
+          health: player.health,
+          maxHealth: config.player.health.max,
+          velocity: player.velocity,
+        });
       } else {
-        // Position appears too far off - force sync correct position to client
+        // Position appears invalid - force sync correct position to client
         socket.emit("positionCorrection", {
           x: player.x,
           y: player.y,
@@ -875,66 +905,6 @@ io.on("connection", (socket) => {
     }
   });
 });
-
-const TICK_RATE = 20;
-const TICK_INTERVAL = 1000 / TICK_RATE;
-let lastTick = Date.now();
-
-// Add server tick simulation
-function serverTick() {
-  const now = Date.now();
-  const deltaTime = (now - lastTick) / 1000;
-  lastTick = now;
-
-  // Update all players
-  Object.entries(players).forEach(([id, player]) => {
-    if (player.isDead) return;
-
-    // Apply velocity to position with deltaTime
-    if (
-      player.velocity &&
-      (player.velocity.x !== 0 || player.velocity.y !== 0)
-    ) {
-      player.x += player.velocity.x * deltaTime;
-      player.y += player.velocity.y * deltaTime;
-
-      // Apply knockback decay
-      if (player.lastKnockbackTime) {
-        const elapsed = now - player.lastKnockbackTime;
-        if (elapsed < config.player.knockback.duration) {
-          player.velocity.x *= Math.pow(
-            player.knockbackDecay,
-            deltaTime * TICK_RATE
-          );
-          player.velocity.y *= Math.pow(
-            player.knockbackDecay,
-            deltaTime * TICK_RATE
-          );
-        } else {
-          player.velocity.x = 0;
-          player.velocity.y = 0;
-          player.lastKnockbackTime = null;
-        }
-      }
-    }
-  });
-
-  // Broadcast state updates to all clients
-  io.emit("fullStateSync", {
-    players: Object.entries(players).reduce((acc, [id, player]) => {
-      acc[id] = {
-        ...player,
-        health: player.health,
-        maxHealth: config.player.health.max,
-      };
-      return acc;
-    }, {}),
-    timestamp: now,
-  });
-}
-
-// Start server tick loop
-setInterval(serverTick, TICK_INTERVAL);
 
 server.listen(3000, () => {
   console.log("Listening on port 3000");
