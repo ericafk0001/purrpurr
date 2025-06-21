@@ -30,32 +30,8 @@ const trees = [];
 const stones = [];
 const walls = []; // Add this line to track walls
 
-// Helper function to broadcast player health updates
-function broadcastHealthUpdate(playerId) {
-  const player = players[playerId];
-  if (!player) return;
-  
-  io.emit("playerHealthUpdate", {
-    playerId,
-    health: player.health,
-    maxHealth: config.player.health.max,
-    timestamp: Date.now(),
-  });
-}
-
-// Helper function to broadcast inventory updates
-function broadcastInventoryUpdate(playerId) {
-  const player = players[playerId];
-  if (!player) return;
-  
-  io.emit("playerInventoryUpdate", {
-    id: playerId,
-    inventory: player.inventory,
-  });
-}
-
 // Health system utility functions
-function damagePlayer(playerId, amount) {
+function damagePlayer(playerId, amount, attacker) {
   const player = players[playerId];
   if (!player) return false;
 
@@ -63,8 +39,30 @@ function damagePlayer(playerId, amount) {
   player.health = Math.max(0, player.health - amount);
   player.lastDamageTime = Date.now();
 
+  if (attacker) {
+    const dx = player.x - attacker.x;
+    const dy = player.y - attacker.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0) {
+      // Use knockback settings from config
+      const knockback = config.player.knockback;
+      player.velocity.x = (dx / dist) * knockback.force;
+      player.velocity.y = (dy / dist) * knockback.force;
+
+      // Set up velocity decay
+      player.lastKnockbackTime = Date.now();
+      player.knockbackDecay = knockback.decay;
+    }
+  }
+
   // Broadcast health update
-  broadcastHealthUpdate(playerId);
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+    velocity: player.velocity,
+  });
 
   if (player.health <= 0 && oldHealth > 0) {
     handlePlayerDeath(playerId);
@@ -85,7 +83,12 @@ function healPlayer(playerId, amount) {
   player.health = Math.min(config.player.health.max, player.health + amount);
 
   // Broadcast health update
-  broadcastHealthUpdate(playerId);
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+  });
 
   return player.health > oldHealth; // Return true if any healing was applied
 }
@@ -399,6 +402,7 @@ io.on("connection", (socket) => {
       activeSlot: 0,
     },
     attacking: false,
+    velocity: { x: 0, y: 0 },
   };
 
   // Give starting items
@@ -444,6 +448,24 @@ io.on("connection", (socket) => {
   socket.on("playerMovement", (movement) => {
     const player = players[socket.id];
     if (player && !player.isDead) {
+
+      if (player.lastKnockbackTime) {
+        const elapsed = Date.now() - player.lastKnockbackTime;
+        if (elapsed < config.player.knockback.duration) {
+          player.velocity.x *= player.knockbackDecay;
+          player.velocity.y *= player.knockbackDecay;
+        } else {
+          player.velocity.x = 0;
+          player.velocity.y = 0;
+          player.lastKnockbackTime = null;
+        }
+      }
+
+      // Apply velocity to position
+      player.x += player.velocity.x;
+      player.y += player.velocity.y;
+
+
       // Validate movement isn't too extreme
       const maxSpeed = config.moveSpeed * 1.5;
       const dx = movement.x - player.x;
@@ -472,6 +494,7 @@ io.on("connection", (socket) => {
           attackStartTime: player.attackStartTime,
           health: player.health,
           maxHealth: config.player.health.max,
+          velocity: player.velocity,
         });
       } else {
         // Position appears invalid - force sync correct position to client
@@ -522,7 +545,10 @@ io.on("connection", (socket) => {
       player.inventory.activeSlot = data.slot;
 
       // Broadcast inventory update to all clients
-      broadcastInventoryUpdate(socket.id);
+      io.emit("playerInventoryUpdate", {
+        id: socket.id,
+        inventory: player.inventory,
+      });
     }
   });
 
@@ -559,11 +585,10 @@ io.on("connection", (socket) => {
     player.lastAttackTime = now;
     player.attackProgress = 0;
 
-    // Broadcast attack start with timing info and rotation
+    // Broadcast attack start with timing info
     io.emit("playerAttackStart", {
       id: socket.id,
       startTime: now,
-      rotation: player.rotation, // Include rotation for consistent animation direction
     });
 
     // Process attack immediately instead of waiting
@@ -679,7 +704,7 @@ io.on("connection", (socket) => {
         }
 
         if (inArc) {
-          damagePlayer(targetId, weapon.damage || 15);
+          damagePlayer(targetId, weapon.damage || 15, attacker);
           io.emit("playerHit", {
             attackerId: attackerId,
             targetId: targetId,
@@ -811,7 +836,10 @@ io.on("connection", (socket) => {
     player.inventory.selectedItem = player.inventory.slots[0];
 
     // Broadcast inventory update
-    broadcastInventoryUpdate(socket.id);
+    io.emit("playerInventoryUpdate", {
+      id: socket.id,
+      inventory: player.inventory,
+    });
   });
 
   // Add after other socket handlers in io.on("connection")
