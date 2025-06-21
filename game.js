@@ -1309,18 +1309,20 @@ function toggleAutoAttack() {
   }
 }
 
-// Add near top with other constants
+// Add frame timing constants
+const TARGET_FPS = 60;
+const FRAME_TIME = 1000 / TARGET_FPS;
 let lastFrameTimestamp = 0;
 
 // Modify gameLoop function
 function gameLoop(timestamp) {
-  // Calculate actual frame time for smoother animation
-  const deltaTime = timestamp - lastFrameTimestamp;
-  if (deltaTime < 4) {
-    // Allow up to 250 FPS
+  // Properly limit to 60 FPS using high resolution timestamps
+  const elapsed = timestamp - lastFrameTimestamp;
+  if (elapsed < FRAME_TIME) {
     requestAnimationFrame(gameLoop);
     return;
   }
+  lastFrameTimestamp = timestamp - (elapsed % FRAME_TIME); // Maintain phase with display refresh
 
   const frameTime = performance.now();
   const frameDelta = frameTime - lastFrameTime;
