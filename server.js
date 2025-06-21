@@ -31,20 +31,37 @@ const stones = [];
 const walls = []; // Add this line to track walls
 
 // Health system utility functions
-function damagePlayer(playerId, amount) {
+function damagePlayer(playerId, amount, attacker) {
   const player = players[playerId];
   if (!player) return false;
 
   const oldHealth = player.health;
   player.health = Math.max(0, player.health - amount);
   player.lastDamageTime = Date.now();
+  // Apply knockback if attacker position is available
+  if (attacker) {
+    const dx = player.x - attacker.x;
+    const dy = player.y - attacker.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0) {
+      // Use knockback settings from config
+      const knockback = config.player.knockback;
+      player.velocity.x = (dx / dist) * knockback.force;
+      player.velocity.y = (dy / dist) * knockback.force;
 
-  // Broadcast health update
+      // Set up velocity decay
+      player.lastKnockbackTime = Date.now();
+      player.knockbackDecay = knockback.decay;
+    }
+  }
+
+  // Broadcast health update with velocity
   io.emit("playerHealthUpdate", {
     playerId,
     health: player.health,
     maxHealth: config.player.health.max,
     timestamp: Date.now(),
+    velocity: player.velocity,
   });
 
   if (player.health <= 0 && oldHealth > 0) {
@@ -367,12 +384,12 @@ function findValidSpawnPosition() {
   };
 }
 
-// Update the socket connection handler to use the new spawn function
+// Add velocity and knockback to player initialization
 io.on("connection", (socket) => {
   const spawnPos = findValidSpawnPosition();
   console.log("A player connected:", socket.id);
 
-  // Initialize player with health and inventory
+  // Initialize player with health, inventory and velocity
   players[socket.id] = {
     x: spawnPos.x,
     y: spawnPos.y,
@@ -385,6 +402,7 @@ io.on("connection", (socket) => {
       activeSlot: 0,
     },
     attacking: false,
+    velocity: { x: 0, y: 0 }, // Add velocity
   };
 
   // Give starting items
@@ -430,14 +448,30 @@ io.on("connection", (socket) => {
   socket.on("playerMovement", (movement) => {
     const player = players[socket.id];
     if (player && !player.isDead) {
-      // Validate movement isn't too extreme
+      // Apply velocity decay with knockback configuration
+      if (player.lastKnockbackTime) {
+        const elapsed = Date.now() - player.lastKnockbackTime;
+        if (elapsed < config.player.knockback.duration) {
+          player.velocity.x *= player.knockbackDecay;
+          player.velocity.y *= player.knockbackDecay;
+        } else {
+          player.velocity.x = 0;
+          player.velocity.y = 0;
+          player.lastKnockbackTime = null;
+        }
+      }
+
+      // Apply velocity to position
+      player.x += player.velocity.x;
+      player.y += player.velocity.y;
+
+      // Then handle normal movement
       const maxSpeed = config.moveSpeed * 1.5;
       const dx = movement.x - player.x;
       const dy = movement.y - player.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance <= maxSpeed) {
-        // Update player position
         player.x = movement.x;
         player.y = movement.y;
         player.rotation = movement.rotation;
@@ -446,7 +480,7 @@ io.on("connection", (socket) => {
         player.x = Math.max(0, Math.min(config.worldWidth, player.x));
         player.y = Math.max(0, Math.min(config.worldHeight, player.y));
 
-        // Broadcast position update with health info
+        // Broadcast position update with health info and velocity
         socket.broadcast.emit("playerMoved", {
           id: socket.id,
           x: player.x,
@@ -458,6 +492,7 @@ io.on("connection", (socket) => {
           attackStartTime: player.attackStartTime,
           health: player.health,
           maxHealth: config.player.health.max,
+          velocity: player.velocity,
         });
       } else {
         // Position appears invalid - force sync correct position to client
@@ -667,7 +702,7 @@ io.on("connection", (socket) => {
         }
 
         if (inArc) {
-          damagePlayer(targetId, weapon.damage || 15);
+          damagePlayer(targetId, weapon.damage || 15, attacker);
           io.emit("playerHit", {
             attackerId: attackerId,
             targetId: targetId,

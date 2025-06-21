@@ -49,6 +49,11 @@ const gameConfig = {
       barWidth: 70, // Wider bar to match screenshot
       barHeight: 10, // Slightly taller
     },
+    knockback: {
+      force: 6, // Base knockback force
+      duration: 200, // How long knockback effect lasts in ms
+      decay: 0.9, // How quickly knockback velocity decays
+    },
     attack: {
       damage: 10,
       range: 50,
