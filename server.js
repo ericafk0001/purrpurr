@@ -80,8 +80,15 @@ function damagePlayer(playerId, amount, attacker) {
     }
   }
 
-  // Broadcast health update
-  broadcastHealthUpdate(playerId);
+  // Broadcast health update with velocity
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+    velocity: player.velocity,
+    velocity: player.velocity,
+  });
 
   if (player.health <= 0 && oldHealth > 0) {
     handlePlayerDeath(playerId);
@@ -102,7 +109,12 @@ function healPlayer(playerId, amount) {
   player.health = Math.min(config.player.health.max, player.health + amount);
 
   // Broadcast health update
-  broadcastHealthUpdate(playerId);
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+  });
 
   return player.health > oldHealth; // Return true if any healing was applied
 }
@@ -557,7 +569,10 @@ io.on("connection", (socket) => {
       player.inventory.activeSlot = data.slot;
 
       // Broadcast inventory update to all clients
-      broadcastInventoryUpdate(socket.id);
+      io.emit("playerInventoryUpdate", {
+        id: socket.id,
+        inventory: player.inventory,
+      });
     }
   });
 
@@ -594,11 +609,10 @@ io.on("connection", (socket) => {
     player.lastAttackTime = now;
     player.attackProgress = 0;
 
-    // Broadcast attack start with timing info and rotation
+    // Broadcast attack start with timing info
     io.emit("playerAttackStart", {
       id: socket.id,
       startTime: now,
-      rotation: player.rotation, // Include rotation for consistent animation direction
     });
 
     // Process attack immediately instead of waiting
@@ -846,7 +860,10 @@ io.on("connection", (socket) => {
     player.inventory.selectedItem = player.inventory.slots[0];
 
     // Broadcast inventory update
-    broadcastInventoryUpdate(socket.id);
+    io.emit("playerInventoryUpdate", {
+      id: socket.id,
+      inventory: player.inventory,
+    });
   });
 
   // Add after other socket handlers in io.on("connection")

@@ -20,43 +20,6 @@ let isAttacking = false;
 const attackDuration = 250; // Faster animation (reduced from 400ms)
 let autoAttackEnabled = false; // New toggle for auto-attack mode
 
-// Touch and mobile compatibility - improved iPad detection
-let isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-  (navigator.userAgent.toLowerCase().indexOf('macintosh') > -1 && navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
-
-// Log mobile detection for debugging
-console.log('Mobile device detected:', isMobileDevice);
-let touchControls = {
-  joystick: {
-    active: false,
-    startX: 0,
-    startY: 0,
-    currentX: 0,
-    currentY: 0,
-    radius: 50,
-    deadzone: 10,
-    touchId: null
-  },
-  // Mobile rotation settings
-  autoFaceMovement: true, // Auto-face the direction you're moving
-  tapToRotate: true,      // Tap screen to face that direction
-  // Mobile UI buttons
-  showMobileMenu: false,  // Toggle for mobile menu
-  mobileButtons: {
-    chat: { x: 0, y: 0, width: 60, height: 30, label: "CHAT" },
-    debug: { x: 0, y: 0, width: 60, height: 30, label: "DEBUG" },
-    autoAttack: { x: 0, y: 0, width: 60, height: 30, label: "AUTO" },
-    apple: { x: 0, y: 0, width: 60, height: 30, label: "APPLE" },
-    teleport: { x: 0, y: 0, width: 60, height: 30, label: "TP" },
-    collisionDebug: { x: 0, y: 0, width: 80, height: 30, label: "COLLISION" },
-    weaponDebug: { x: 0, y: 0, width: 80, height: 30, label: "WEAPON" }
-  }
-};
-let virtualKeys = { w: false, a: false, s: false, d: false };
-
-// Track inventory clicks for double-click detection
-let lastInventoryClick = { slot: -1, time: 0 };
-
 let players = {};
 let myPlayer = null;
 let trees = [];
@@ -274,9 +237,7 @@ const mouse = {
 
 // modify updateRotation function to use target camera position
 function updateRotation() {
-  // Only update rotation based on mouse for desktop devices
-  if (!myPlayer || isMobileDevice) return;
-  
+  if (!myPlayer) return;
   const screenMouseX = mouse.x;
   const screenMouseY = mouse.y;
 
@@ -366,9 +327,6 @@ function drawPlayer(player) {
       const maxSwingAngle = (110 * Math.PI) / 180;
       let swingAngle = 0;
 
-      // Use the rotation from when the attack started for consistent direction
-      const attackRotation = player.attackStartRotation !== undefined ? player.attackStartRotation : baseRotation;
-      
       if (player.attackProgress < 0.5) {
         swingAngle = -(player.attackProgress / 0.5) * maxSwingAngle;
       } else {
@@ -376,9 +334,7 @@ function drawPlayer(player) {
           -maxSwingAngle +
           ((player.attackProgress - 0.5) / 0.5) * maxSwingAngle;
       }
-      
-      // Apply swing to the attack start rotation, not current rotation
-      baseRotation = attackRotation + swingAngle;
+      baseRotation += swingAngle;
     }
 
     ctx.rotate(baseRotation);
@@ -829,13 +785,10 @@ function updatePosition() {
   let dx = 0;
   let dy = 0;
 
-  // Use different input source based on device type
-  const activeKeys = isMobileDevice ? getVirtualKeys() : keys;
-
-  if (activeKeys.w && myPlayer.y > 0) dy -= 1;
-  if (activeKeys.s && myPlayer.y < config.worldHeight) dy += 1;
-  if (activeKeys.a && myPlayer.x > 0) dx -= 1;
-  if (activeKeys.d && myPlayer.x < config.worldWidth) dx += 1;
+  if (keys.w && myPlayer.y > 0) dy -= 1;
+  if (keys.s && myPlayer.y < config.worldHeight) dy += 1;
+  if (keys.a && myPlayer.x > 0) dx -= 1;
+  if (keys.d && myPlayer.x < config.worldWidth) dx += 1;
 
   // normalize diagonal movement
   if (dx !== 0 && dy !== 0) {
@@ -1053,6 +1006,11 @@ function drawCollisionCircles() {
   }
 }
 
+// Add key handler
+window.addEventListener("keydown", (e) => {
+  // ...existing code...
+});
+
 let chatMode = false;
 let chatInput = "";
 let playerMessages = {}; // store messages for each player
@@ -1092,75 +1050,16 @@ function drawChatBubble(player) {
 }
 
 function drawChatInput() {
-  // Only draw chat input when in chat mode
   if (!chatMode) return;
-  
-  const inputBoxX = 10;
-  const inputBoxY = canvas.height - 40;
-  const inputBoxWidth = canvas.width - 20;
-  const inputBoxHeight = 30;
-  
-  // Active chat input
+
+  // draw chat input box at bottom of screen
   ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-  ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
-  
-  // Draw a border to make it look more clickable
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
+  ctx.fillRect(10, canvas.height - 40, canvas.width - 20, 30);
 
-  // Store chat input box position for click detection
-  window.chatInputBox = {
-    x: inputBoxX,
-    y: inputBoxY,
-    width: inputBoxWidth,
-    height: inputBoxHeight
-  };
-
-  // On mobile, add a send button
-  if (isMobileDevice) {
-    const sendButtonWidth = 60;
-    const sendButtonX = canvas.width - 70;
-    const sendButtonY = canvas.height - 35;
-    
-    // Draw send button
-    ctx.fillStyle = chatInput.trim().length > 0 ? "rgba(100, 255, 100, 0.8)" : "rgba(150, 150, 150, 0.8)";
-    ctx.fillRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
-    
-    // Draw send button border
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
-    
-    // Draw send button text
-    ctx.fillStyle = "black";
-    ctx.font = "12px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("SEND", sendButtonX + sendButtonWidth/2, sendButtonY + 14);
-    
-    // Store send button position for touch detection
-    window.mobileSendButton = {
-      x: sendButtonX,
-      y: sendButtonY,
-      width: sendButtonWidth,
-      height: 20
-    };
-    
-    // Adjust chat input area to not overlap with send button
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
-    
-    // Update chat input box to exclude send button area
-    window.chatInputBox.width = sendButtonX - inputBoxX - 5;
-  } else {
-    // Desktop version (original)
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
-  }
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.textAlign = "left";
+  ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
 }
 
 // Draw the inventory UI
@@ -1180,7 +1079,7 @@ function drawInventory() {
     const y = startY;
     const isSelected = i === myPlayer.inventory.activeSlot;
 
-    // Draw slot background (back to simple style)
+    // Draw slot background
     ctx.fillStyle = isSelected
       ? "rgba(100, 100, 100, 0.5)"
       : inv.displayUI.backgroundColor;
@@ -1296,8 +1195,13 @@ function startAttack() {
       myPlayer.attacking = true;
       myPlayer.attackProgress = 0;
       myPlayer.attackStartTime = now;
-      // Capture the rotation at attack start for consistent animation
-      myPlayer.attackStartRotation = myPlayer.rotation;
+
+      socket.emit("attackAnimationUpdate", {
+        attacking: true,
+        progress: 0,
+        startTime: now,
+        rotation: myPlayer.rotation,
+      });
     }
 
     socket.emit("attackStart");
@@ -1363,7 +1267,6 @@ function gameLoop(timestamp) {
       myPlayer.attacking = false;
       myPlayer.attackProgress = 0;
       myPlayer.attackStartTime = null;
-      myPlayer.attackStartRotation = null;
 
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
@@ -1390,7 +1293,16 @@ function gameLoop(timestamp) {
       player.attacking = false;
       player.attackProgress = 0;
       player.attackStartTime = null;
-      player.attackStartRotation = null;
+    }
+
+    // For local player, emit animation updates
+    if (player === myPlayer) {
+      socket.emit("attackAnimationUpdate", {
+        attacking: player.attacking,
+        progress: player.attackProgress,
+        startTime: player.attackStartTime,
+        rotation: player.rotation,
+      });
     }
   });
 
@@ -1423,6 +1335,46 @@ function canAutoAttackWithCurrentItem() {
   return autoAttackableItems.includes(activeItem.id);
 }
 
+// Modify startAttack function
+function startAttack() {
+  if (!canAutoAttackWithCurrentItem()) return;
+
+  const now = Date.now();
+  const cooldown = items.hammer.cooldown || 800;
+  lastAttackAttempt = now; // Record the attempt time
+
+  // Check if we're in cooldown
+  const timeSinceLastAttack = now - lastAttackTime;
+
+  // Allow attack if either:
+  // 1. Cooldown is completely finished, or
+  // 2. We're within buffer window and have a recent attack attempt
+  if (
+    timeSinceLastAttack > cooldown ||
+    (timeSinceLastAttack > cooldown - ATTACK_BUFFER_WINDOW &&
+      lastAttackAttempt > lastAttackTime)
+  ) {
+    isAttacking = true;
+    lastAttackTime = now;
+    attackAnimationProgress = 0;
+
+    if (myPlayer) {
+      myPlayer.attacking = true;
+      myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = now;
+
+      socket.emit("attackAnimationUpdate", {
+        attacking: true,
+        progress: 0,
+        startTime: now,
+        rotation: myPlayer.rotation,
+      });
+    }
+
+    socket.emit("attackStart");
+  }
+}
+
 // Add to event listeners section for number keys 1-5 and Q
 window.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -1430,48 +1382,34 @@ window.addEventListener("keydown", (e) => {
       // enter chat mode
       chatMode = true;
       chatInput = "";
-      // Show mobile keyboard if on mobile device - call the function
-      if (isMobileDevice) {
-        showMobileKeyboard();
-      }
     } else {
       // send message and exit chat mode
-      sendChatMessage(chatInput);
+      if (chatInput.trim().length > 0) {
+        const message = chatInput
+          .trim()
+          .substring(0, config.chat.maxMessageLength);
+
+        // show own message immediately
+        playerMessages[socket.id] = {
+          text: message,
+          timestamp: Date.now(),
+        };
+
+        socket.emit("chatMessage", {
+          message: message,
+        });
+      }
       chatMode = false;
       chatInput = "";
-      // Hide mobile keyboard if on mobile device
-      if (isMobileDevice) {
-        hideMobileKeyboard();
-      }
-    }
-    return;
-  }
-
-  if (e.key === "Escape" && chatMode) {
-    // Exit chat mode without sending message
-    chatMode = false;
-    chatInput = "";
-    if (isMobileDevice) {
-      hideMobileKeyboard();
     }
     return;
   }
 
   if (chatMode) {
-    // On mobile, don't process desktop keyboard events if mobile input exists
-    if (isMobileDevice && window.mobileKeyboardInput) {
-      return; // Let the mobile input handle all typing
-    }
-    
     if (e.key === "Backspace") {
       chatInput = chatInput.slice(0, -1);
     } else if (e.key.length === 1) {
       chatInput += e.key;
-    }
-    
-    // Sync with mobile keyboard input if it exists
-    if (window.mobileKeyboardInput && window.mobileKeyboardInput.value !== chatInput) {
-      window.mobileKeyboardInput.value = chatInput;
     }
     return;
   }
@@ -1682,18 +1620,13 @@ function drawPlayers() {
   drawInventory();
   drawChatInput();
   drawDebugPanel(); // Add this line
-  
-  // Draw mobile controls for touch devices
-  if (isMobileDevice) {
-    drawMobileControls();
-  }
 }
 
 loadAssets();
 
 requestAnimationFrame(gameLoop);
 
-// Add mouse click handler for attacks and inventory
+// Add mouse click handler for attacks
 window.addEventListener("mousedown", (e) => {
   if (e.button === 0 && !chatMode) {
     // Get mouse position relative to canvas
@@ -1736,23 +1669,26 @@ window.addEventListener("mousedown", (e) => {
 // Add socket listeners for attack events
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
-    // Always use server timestamp for consistency
-    const startTime = data.startTime || Date.now();
+    // Use server timestamp if provided, otherwise use current time
+    const startTime = data.timestamp || Date.now();
     players[data.id].attacking = true;
     players[data.id].attackStartTime = startTime;
     players[data.id].attackProgress = 0;
-    
-    // Use the rotation from the server for consistent animation direction
-    players[data.id].attackStartRotation = data.rotation !== undefined ? data.rotation : players[data.id].rotation;
   }
 });
 
 socket.on("playerAttackEnd", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = false;
-    players[data.id].attackProgress = 0;
-    players[data.id].attackStartTime = null;
-    players[data.id].attackStartRotation = null;
+  }
+});
+
+socket.on("attackAnimationUpdate", (data) => {
+  if (players[data.id]) {
+    players[data.id].attacking = data.attacking;
+    players[data.id].attackProgress = data.progress;
+    players[data.id].attackStartTime = data.startTime;
+    players[data.id].rotation = data.rotation;
   }
 });
 
@@ -1812,8 +1748,6 @@ socket.on("fullStateSync", (data) => {
       // Keep local animation state
       const attackState = players[id].attacking;
       const attackProgress = players[id].attackProgress;
-      const attackStartTime = players[id].attackStartTime;
-      const attackStartRotation = players[id].attackStartRotation;
 
       // Update with server data
       players[id] = {
@@ -1821,8 +1755,6 @@ socket.on("fullStateSync", (data) => {
         // Preserve animation state
         attacking: attackState,
         attackProgress: attackProgress,
-        attackStartTime: attackStartTime,
-        attackStartRotation: attackStartRotation,
       };
     } else {
       // New player
@@ -2790,3 +2722,4 @@ function resetViewportForKeyboard() {
     }, 300);
   }
 }
+
