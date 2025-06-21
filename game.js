@@ -2468,12 +2468,14 @@ function handleMobileButtonPress(buttonKey) {
       break;
       
     case 'apple':
-      // Quick select apple (equivalent to 'q' key)
-      const appleSlot = myPlayer?.inventory?.slots.findIndex(
-        (item) => item?.id === "apple"
-      );
-      if (appleSlot !== -1) {
-        handleInventorySelection(appleSlot);
+      {
+        // Quick select apple (equivalent to 'q' key)
+        const appleSlot = myPlayer?.inventory?.slots.findIndex(
+          (item) => item?.id === "apple"
+        );
+        if (appleSlot !== -1) {
+          handleInventorySelection(appleSlot);
+        }
       }
       break;
       
