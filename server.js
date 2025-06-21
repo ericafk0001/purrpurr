@@ -38,7 +38,7 @@ function damagePlayer(playerId, amount, attacker) {
   const oldHealth = player.health;
   player.health = Math.max(0, player.health - amount);
   player.lastDamageTime = Date.now();
-
+  // Apply knockback if attacker position is available
   if (attacker) {
     const dx = player.x - attacker.x;
     const dy = player.y - attacker.y;
@@ -55,12 +55,13 @@ function damagePlayer(playerId, amount, attacker) {
     }
   }
 
-  // Broadcast health update
+  // Broadcast health update with velocity
   io.emit("playerHealthUpdate", {
     playerId,
     health: player.health,
     maxHealth: config.player.health.max,
     timestamp: Date.now(),
+    velocity: player.velocity,
     velocity: player.velocity,
   });
 
@@ -384,12 +385,12 @@ function findValidSpawnPosition() {
   };
 }
 
-// Update the socket connection handler to use the new spawn function
+// Add velocity and knockback to player initialization
 io.on("connection", (socket) => {
   const spawnPos = findValidSpawnPosition();
   console.log("A player connected:", socket.id);
 
-  // Initialize player with health and inventory
+  // Initialize player with health, inventory and velocity
   players[socket.id] = {
     x: spawnPos.x,
     y: spawnPos.y,
@@ -402,7 +403,7 @@ io.on("connection", (socket) => {
       activeSlot: 0,
     },
     attacking: false,
-    velocity: { x: 0, y: 0 },
+    velocity: { x: 0, y: 0 }, // Add velocity
   };
 
   // Give starting items
@@ -473,7 +474,6 @@ io.on("connection", (socket) => {
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance <= maxSpeed) {
-        // Update player position
         player.x = movement.x;
         player.y = movement.y;
         player.rotation = movement.rotation;
@@ -482,7 +482,7 @@ io.on("connection", (socket) => {
         player.x = Math.max(0, Math.min(config.worldWidth, player.x));
         player.y = Math.max(0, Math.min(config.worldHeight, player.y));
 
-        // Broadcast position update with health info
+        // Broadcast position update with health info and velocity
         socket.broadcast.emit("playerMoved", {
           id: socket.id,
           x: player.x,

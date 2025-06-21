@@ -96,6 +96,33 @@ socket.on("newPlayer", (playerInfo) => {
   };
 });
 
+// Add improved socket handlers for synchronization
+socket.on("playerHealthUpdate", (data) => {
+  const player = players[data.playerId];
+  if (!player) return;
+
+  // Update player health with validation
+  player.health = Math.max(0, Math.min(data.health, data.maxHealth));
+  player.lastHealthUpdate = data.timestamp;
+
+  // Apply velocity if provided
+  if (data.velocity) {
+    player.velocity = data.velocity;
+  }
+
+  // If this is our player, update local state
+  if (data.playerId === socket.id && myPlayer) {
+    myPlayer.health = player.health;
+    if (myPlayer.velocity) {
+      myPlayer.velocity = data.velocity;
+    }
+    if (myPlayer.health < data.health) {
+      showDamageEffect();
+    }
+  }
+});
+
+// Update socket handler for player movement
 socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
     // Preserve and update animation state
@@ -741,6 +768,7 @@ function updatePosition() {
   // Don't allow movement if dead
   if (myPlayer.isDead) return;
 
+  // Apply velocity
   if (myPlayer.velocity) {
     myPlayer.x += myPlayer.velocity.x;
     myPlayer.y += myPlayer.velocity.y;
