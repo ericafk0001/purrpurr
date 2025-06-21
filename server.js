@@ -30,6 +30,30 @@ const trees = [];
 const stones = [];
 const walls = []; // Add this line to track walls
 
+// Helper function to broadcast player health updates
+function broadcastHealthUpdate(playerId) {
+  const player = players[playerId];
+  if (!player) return;
+  
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+  });
+}
+
+// Helper function to broadcast inventory updates
+function broadcastInventoryUpdate(playerId) {
+  const player = players[playerId];
+  if (!player) return;
+  
+  io.emit("playerInventoryUpdate", {
+    id: playerId,
+    inventory: player.inventory,
+  });
+}
+
 // Health system utility functions
 function damagePlayer(playerId, amount) {
   const player = players[playerId];
@@ -40,12 +64,7 @@ function damagePlayer(playerId, amount) {
   player.lastDamageTime = Date.now();
 
   // Broadcast health update
-  io.emit("playerHealthUpdate", {
-    playerId,
-    health: player.health,
-    maxHealth: config.player.health.max,
-    timestamp: Date.now(),
-  });
+  broadcastHealthUpdate(playerId);
 
   if (player.health <= 0 && oldHealth > 0) {
     handlePlayerDeath(playerId);
@@ -66,12 +85,7 @@ function healPlayer(playerId, amount) {
   player.health = Math.min(config.player.health.max, player.health + amount);
 
   // Broadcast health update
-  io.emit("playerHealthUpdate", {
-    playerId,
-    health: player.health,
-    maxHealth: config.player.health.max,
-    timestamp: Date.now(),
-  });
+  broadcastHealthUpdate(playerId);
 
   return player.health > oldHealth; // Return true if any healing was applied
 }
@@ -508,10 +522,7 @@ io.on("connection", (socket) => {
       player.inventory.activeSlot = data.slot;
 
       // Broadcast inventory update to all clients
-      io.emit("playerInventoryUpdate", {
-        id: socket.id,
-        inventory: player.inventory,
-      });
+      broadcastInventoryUpdate(socket.id);
     }
   });
 
@@ -800,10 +811,7 @@ io.on("connection", (socket) => {
     player.inventory.selectedItem = player.inventory.slots[0];
 
     // Broadcast inventory update
-    io.emit("playerInventoryUpdate", {
-      id: socket.id,
-      inventory: player.inventory,
-    });
+    broadcastInventoryUpdate(socket.id);
   });
 
   // Add after other socket handlers in io.on("connection")

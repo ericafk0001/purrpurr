@@ -20,6 +20,43 @@ let isAttacking = false;
 const attackDuration = 250; // Faster animation (reduced from 400ms)
 let autoAttackEnabled = false; // New toggle for auto-attack mode
 
+// Touch and mobile compatibility - improved iPad detection
+let isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+  (navigator.userAgent.toLowerCase().indexOf('macintosh') > -1 && navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+
+// Log mobile detection for debugging
+console.log('Mobile device detected:', isMobileDevice);
+let touchControls = {
+  joystick: {
+    active: false,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    radius: 50,
+    deadzone: 10,
+    touchId: null
+  },
+  // Mobile rotation settings
+  autoFaceMovement: true, // Auto-face the direction you're moving
+  tapToRotate: true,      // Tap screen to face that direction
+  // Mobile UI buttons
+  showMobileMenu: false,  // Toggle for mobile menu
+  mobileButtons: {
+    chat: { x: 0, y: 0, width: 60, height: 30, label: "CHAT" },
+    debug: { x: 0, y: 0, width: 60, height: 30, label: "DEBUG" },
+    autoAttack: { x: 0, y: 0, width: 60, height: 30, label: "AUTO" },
+    apple: { x: 0, y: 0, width: 60, height: 30, label: "APPLE" },
+    teleport: { x: 0, y: 0, width: 60, height: 30, label: "TP" },
+    collisionDebug: { x: 0, y: 0, width: 80, height: 30, label: "COLLISION" },
+    weaponDebug: { x: 0, y: 0, width: 80, height: 30, label: "WEAPON" }
+  }
+};
+let virtualKeys = { w: false, a: false, s: false, d: false };
+
+// Track inventory clicks for double-click detection
+let lastInventoryClick = { slot: -1, time: 0 };
+
 let players = {};
 let myPlayer = null;
 let trees = [];
@@ -209,7 +246,9 @@ const mouse = {
 
 // modify updateRotation function to use target camera position
 function updateRotation() {
-  if (!myPlayer) return;
+  // Only update rotation based on mouse for desktop devices
+  if (!myPlayer || isMobileDevice) return;
+  
   const screenMouseX = mouse.x;
   const screenMouseY = mouse.y;
 
@@ -742,10 +781,13 @@ function updatePosition() {
   let dx = 0;
   let dy = 0;
 
-  if (keys.w && myPlayer.y > 0) dy -= 1;
-  if (keys.s && myPlayer.y < config.worldHeight) dy += 1;
-  if (keys.a && myPlayer.x > 0) dx -= 1;
-  if (keys.d && myPlayer.x < config.worldWidth) dx += 1;
+  // Use different input source based on device type
+  const activeKeys = isMobileDevice ? getVirtualKeys() : keys;
+
+  if (activeKeys.w && myPlayer.y > 0) dy -= 1;
+  if (activeKeys.s && myPlayer.y < config.worldHeight) dy += 1;
+  if (activeKeys.a && myPlayer.x > 0) dx -= 1;
+  if (activeKeys.d && myPlayer.x < config.worldWidth) dx += 1;
 
   // normalize diagonal movement
   if (dx !== 0 && dy !== 0) {
@@ -963,11 +1005,6 @@ function drawCollisionCircles() {
   }
 }
 
-// Add key handler
-window.addEventListener("keydown", (e) => {
-  // ...existing code...
-});
-
 let chatMode = false;
 let chatInput = "";
 let playerMessages = {}; // store messages for each player
@@ -1007,16 +1044,75 @@ function drawChatBubble(player) {
 }
 
 function drawChatInput() {
+  // Only draw chat input when in chat mode
   if (!chatMode) return;
-
-  // draw chat input box at bottom of screen
+  
+  const inputBoxX = 10;
+  const inputBoxY = canvas.height - 40;
+  const inputBoxWidth = canvas.width - 20;
+  const inputBoxHeight = 30;
+  
+  // Active chat input
   ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-  ctx.fillRect(10, canvas.height - 40, canvas.width - 20, 30);
+  ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
+  
+  // Draw a border to make it look more clickable
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
 
-  ctx.fillStyle = "white";
-  ctx.font = "16px Arial";
-  ctx.textAlign = "left";
-  ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
+  // Store chat input box position for click detection
+  window.chatInputBox = {
+    x: inputBoxX,
+    y: inputBoxY,
+    width: inputBoxWidth,
+    height: inputBoxHeight
+  };
+
+  // On mobile, add a send button
+  if (isMobileDevice) {
+    const sendButtonWidth = 60;
+    const sendButtonX = canvas.width - 70;
+    const sendButtonY = canvas.height - 35;
+    
+    // Draw send button
+    ctx.fillStyle = chatInput.trim().length > 0 ? "rgba(100, 255, 100, 0.8)" : "rgba(150, 150, 150, 0.8)";
+    ctx.fillRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
+    
+    // Draw send button border
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
+    
+    // Draw send button text
+    ctx.fillStyle = "black";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("SEND", sendButtonX + sendButtonWidth/2, sendButtonY + 14);
+    
+    // Store send button position for touch detection
+    window.mobileSendButton = {
+      x: sendButtonX,
+      y: sendButtonY,
+      width: sendButtonWidth,
+      height: 20
+    };
+    
+    // Adjust chat input area to not overlap with send button
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
+    
+    // Update chat input box to exclude send button area
+    window.chatInputBox.width = sendButtonX - inputBoxX - 5;
+  } else {
+    // Desktop version (original)
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
+  }
 }
 
 // Draw the inventory UI
@@ -1036,7 +1132,7 @@ function drawInventory() {
     const y = startY;
     const isSelected = i === myPlayer.inventory.activeSlot;
 
-    // Draw slot background
+    // Draw slot background (back to simple style)
     ctx.fillStyle = isSelected
       ? "rgba(100, 100, 100, 0.5)"
       : inv.displayUI.backgroundColor;
@@ -1286,34 +1382,48 @@ window.addEventListener("keydown", (e) => {
       // enter chat mode
       chatMode = true;
       chatInput = "";
+      // Show mobile keyboard if on mobile device - call the function
+      if (isMobileDevice) {
+        showMobileKeyboard();
+      }
     } else {
       // send message and exit chat mode
-      if (chatInput.trim().length > 0) {
-        const message = chatInput
-          .trim()
-          .substring(0, config.chat.maxMessageLength);
-
-        // show own message immediately
-        playerMessages[socket.id] = {
-          text: message,
-          timestamp: Date.now(),
-        };
-
-        socket.emit("chatMessage", {
-          message: message,
-        });
-      }
+      sendChatMessage(chatInput);
       chatMode = false;
       chatInput = "";
+      // Hide mobile keyboard if on mobile device
+      if (isMobileDevice) {
+        hideMobileKeyboard();
+      }
+    }
+    return;
+  }
+
+  if (e.key === "Escape" && chatMode) {
+    // Exit chat mode without sending message
+    chatMode = false;
+    chatInput = "";
+    if (isMobileDevice) {
+      hideMobileKeyboard();
     }
     return;
   }
 
   if (chatMode) {
+    // On mobile, don't process desktop keyboard events if mobile input exists
+    if (isMobileDevice && window.mobileKeyboardInput) {
+      return; // Let the mobile input handle all typing
+    }
+    
     if (e.key === "Backspace") {
       chatInput = chatInput.slice(0, -1);
     } else if (e.key.length === 1) {
       chatInput += e.key;
+    }
+    
+    // Sync with mobile keyboard input if it exists
+    if (window.mobileKeyboardInput && window.mobileKeyboardInput.value !== chatInput) {
+      window.mobileKeyboardInput.value = chatInput;
     }
     return;
   }
@@ -1524,15 +1634,50 @@ function drawPlayers() {
   drawInventory();
   drawChatInput();
   drawDebugPanel(); // Add this line
+  
+  // Draw mobile controls for touch devices
+  if (isMobileDevice) {
+    drawMobileControls();
+  }
 }
 
 loadAssets();
 
 requestAnimationFrame(gameLoop);
 
-// Add mouse click handler for attacks
+// Add mouse click handler for attacks and inventory
 window.addEventListener("mousedown", (e) => {
   if (e.button === 0 && !chatMode) {
+    // Get mouse position relative to canvas
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Check if clicking on inventory slot first
+    const slotIndex = getInventorySlotFromPosition(mouseX, mouseY);
+    if (slotIndex !== -1) {
+      // Double-click logic: if clicking the same slot twice quickly, use the item
+      const now = Date.now();
+      const timeSinceLastClick = now - (lastInventoryClick?.time || 0);
+      const clickedSameSlot = slotIndex === (lastInventoryClick?.slot || -1);
+      
+      if (clickedSameSlot && timeSinceLastClick < 500) { // 500ms double-click window
+        // Double-click: use the item
+        const item = myPlayer?.inventory?.slots[slotIndex];
+        if (item?.type === "consumable") {
+          useItem(slotIndex);
+        }
+      } else {
+        // Single click: select the slot
+        handleInventorySelection(slotIndex);
+      }
+      
+      // Remember this click for double-click detection
+      lastInventoryClick = { slot: slotIndex, time: now };
+      return; // Don't process as attack
+    }
+    
+    // Not clicking inventory, handle normal attack/use
     const activeItem =
       myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
     if (!activeItem) return;
@@ -1763,4 +1908,867 @@ function resolveWallCollisions() {
       }
     }
   });
+}
+
+// Touch and mobile control functions
+function getVirtualKeys() {
+  if (!isMobileDevice) return keys;
+  
+  updateVirtualMovement();
+  return virtualKeys;
+}
+
+function updateVirtualMovement() {
+  if (!touchControls.joystick.active) {
+    virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
+    return;
+  }
+  
+  const deltaX = touchControls.joystick.currentX - touchControls.joystick.startX;
+  const deltaY = touchControls.joystick.currentY - touchControls.joystick.startY;
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  
+  if (distance > touchControls.joystick.deadzone) {
+    // Normalize the input but cap it at the joystick radius
+    const maxDistance = Math.min(distance, touchControls.joystick.radius);
+    const normalizedX = (deltaX / distance) * (maxDistance / touchControls.joystick.radius);
+    const normalizedY = (deltaY / distance) * (maxDistance / touchControls.joystick.radius);
+    
+    // Use a lower threshold for smoother 8-directional movement
+    const threshold = 0.2;
+    virtualKeys.w = normalizedY < -threshold;
+    virtualKeys.s = normalizedY > threshold;
+    virtualKeys.a = normalizedX < -threshold;
+    virtualKeys.d = normalizedX > threshold;
+    
+    // Auto-face movement direction if enabled
+    if (touchControls.autoFaceMovement && myPlayer && distance > touchControls.joystick.deadzone) {
+      const angle = Math.atan2(deltaY, deltaX) - Math.PI / 2;
+      const oldRotation = myPlayer.rotation;
+      myPlayer.rotation = angle;
+      
+      // Send rotation update to server
+      socket.emit("playerMovement", {
+        x: myPlayer.x,
+        y: myPlayer.y,
+        rotation: myPlayer.rotation,
+      });
+    }
+  } else {
+    virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
+  }
+}
+
+function drawMobileControls() {
+  if (!isMobileDevice) return;
+  
+  ctx.save();
+  
+  // Draw virtual joystick
+  const joystickBaseX = 100;
+  const joystickBaseY = canvas.height - 100;
+  
+  // Draw joystick outer ring
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(joystickBaseX, joystickBaseY, touchControls.joystick.radius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Draw joystick base
+  ctx.globalAlpha = 0.2;
+  ctx.fillStyle = "gray";
+  ctx.beginPath();
+  ctx.arc(joystickBaseX, joystickBaseY, touchControls.joystick.radius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw joystick knob
+  let knobX = joystickBaseX;
+  let knobY = joystickBaseY;
+  
+  if (touchControls.joystick.active) {
+    const deltaX = touchControls.joystick.currentX - touchControls.joystick.startX;
+    const deltaY = touchControls.joystick.currentY - touchControls.joystick.startY;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    
+    // Constrain knob to joystick radius
+    if (distance <= touchControls.joystick.radius) {
+      knobX = joystickBaseX + deltaX;
+      knobY = joystickBaseY + deltaY;
+    } else {
+      const angle = Math.atan2(deltaY, deltaX);
+      knobX = joystickBaseX + Math.cos(angle) * touchControls.joystick.radius;
+      knobY = joystickBaseY + Math.sin(angle) * touchControls.joystick.radius;
+    }
+  }
+  
+  // Draw knob shadow
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.arc(knobX + 2, knobY + 2, 22, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw knob
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = touchControls.joystick.active ? "#4CAF50" : "white";
+  ctx.beginPath();
+  ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw knob border
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Draw rotation mode indicator
+  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+  ctx.font = "14px Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  const modeText = touchControls.autoFaceMovement ? "Auto-Face: ON" : "Tap to Face: ON";
+  ctx.fillText(modeText, 10, 10);
+  
+  // Draw rotation mode toggle button (small button in top-right)
+  const toggleButtonX = canvas.width - 30;
+  const toggleButtonY = 30;
+  ctx.fillStyle = touchControls.autoFaceMovement ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 100, 100, 0.8)";
+  ctx.beginPath();
+  ctx.arc(toggleButtonX, toggleButtonY, 20, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Add border
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  ctx.fillStyle = "black";
+  ctx.font = "14px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("↻", toggleButtonX, toggleButtonY);
+  
+  // Draw menu toggle button (hamburger menu)
+  const menuButtonX = canvas.width - 80;
+  const menuButtonY = 30;
+  ctx.fillStyle = touchControls.showMobileMenu ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 255, 255, 0.8)";
+  ctx.beginPath();
+  ctx.roundRect(menuButtonX - 20, menuButtonY - 15, 40, 30, 5);
+  ctx.fill();
+  
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // Draw hamburger lines
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(menuButtonX - 12, menuButtonY - 8);
+  ctx.lineTo(menuButtonX + 12, menuButtonY - 8);
+  ctx.moveTo(menuButtonX - 12, menuButtonY);
+  ctx.lineTo(menuButtonX + 12, menuButtonY);
+  ctx.moveTo(menuButtonX - 12, menuButtonY + 8);
+  ctx.lineTo(menuButtonX + 12, menuButtonY + 8);
+  ctx.stroke();
+  
+  // Draw mobile menu if open
+  if (touchControls.showMobileMenu) {
+    drawMobileMenu();
+  }
+  
+  // Draw attack instruction for mobile
+  if (!touchControls.showMobileMenu) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("Tap anywhere to attack", canvas.width / 2, 10);
+  }
+  
+  ctx.restore();
+}
+
+function drawMobileMenu() {
+  // Calculate button positions
+  const startX = canvas.width - 200;
+  const startY = 80;
+  const buttonSpacing = 40;
+  
+  // Update button positions
+  const buttons = touchControls.mobileButtons;
+  let yOffset = 0;
+  
+  Object.keys(buttons).forEach((key, index) => {
+    buttons[key].x = startX;
+    buttons[key].y = startY + (index * buttonSpacing);
+  });
+  
+  // Draw menu background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+  ctx.beginPath();
+  ctx.roundRect(startX - 10, startY - 10, 180, Object.keys(buttons).length * buttonSpacing + 10, 10);
+  ctx.fill();
+  
+  // Draw menu buttons
+  Object.entries(buttons).forEach(([key, button]) => {
+    // Determine button state and color
+    let isActive = false;
+    let buttonColor = "rgba(255, 255, 255, 0.8)";
+    
+    switch(key) {
+      case 'debug':
+        isActive = debugPanelVisible;
+        buttonColor = isActive ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        break;
+      case 'autoAttack':
+        isActive = autoAttackEnabled;
+        buttonColor = isActive ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        break;
+      case 'chat':
+        isActive = chatMode;
+        buttonColor = isActive ? "rgba(100, 255, 255, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        break;
+      case 'teleport':
+        // Only show teleport if debug is enabled
+        buttonColor = debugPanelVisible ? "rgba(255, 255, 255, 0.8)" : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
+        break;
+      case 'collisionDebug':
+        isActive = config.collision.debug;
+        // Only show if debug panel is enabled
+        buttonColor = debugPanelVisible ? (isActive ? "rgba(255, 100, 100, 0.8)" : "rgba(255, 255, 255, 0.8)") : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
+        break;
+      case 'weaponDebug':
+        isActive = config.collision.weaponDebug;
+        // Only show if debug panel is enabled
+        buttonColor = debugPanelVisible ? (isActive ? "rgba(255, 150, 100, 0.8)" : "rgba(255, 255, 255, 0.8)") : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
+        break;
+    }
+    
+    
+    // Draw button background
+    ctx.fillStyle = buttonColor;
+    ctx.beginPath();
+    ctx.roundRect(button.x, button.y, button.width, button.height, 5);
+    ctx.fill();
+    
+    // Draw button border
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Draw button text
+    ctx.fillStyle = "black";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(button.label, button.x + button.width/2, button.y + button.height/2);
+  });
+}
+
+function getTouchPos(e, touch) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: touch.clientX - rect.left,
+    y: touch.clientY - rect.top
+  };
+}
+
+function isPointInCircle(x, y, centerX, centerY, radius) {
+  const dx = x - centerX;
+  const dy = y - centerY;
+  return (dx * dx + dy * dy) <= (radius * radius);
+}
+
+// Helper function to check if point is within a rectangle
+function isPointInRect(x, y, rectX, rectY, width, height) {
+  return x >= rectX && x <= rectX + width && y >= rectY && y <= rectY + height;
+}
+
+// Helper function to get touched mobile button
+function getTouchedMobileButton(x, y) {
+  if (!touchControls.showMobileMenu) return null;
+  
+  const buttons = touchControls.mobileButtons;
+  for (const [key, button] of Object.entries(buttons)) {
+    if (isPointInRect(x, y, button.x, button.y, button.width, button.height)) {
+      return key;
+    }
+  }
+  return null;
+}
+
+// Touch event handlers for mobile compatibility
+canvas.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  
+  for (let i = 0; i < e.touches.length; i++) {
+    const touch = e.touches[i];
+    const pos = getTouchPos(e, touch);
+    
+    // Check joystick area - allow dragging from anywhere in the joystick area
+    const joystickBaseX = 100;
+    const joystickBaseY = canvas.height - 100;
+    if (isPointInCircle(pos.x, pos.y, joystickBaseX, joystickBaseY, touchControls.joystick.radius)) {
+      touchControls.joystick.active = true;
+      touchControls.joystick.startX = joystickBaseX;
+      touchControls.joystick.startY = joystickBaseY;
+      touchControls.joystick.touchId = touch.identifier; // Store the touch ID
+      
+      // Start the joystick at the touch position (clamped to radius)
+      const deltaX = pos.x - joystickBaseX;
+      const deltaY = pos.y - joystickBaseY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      if (distance <= touchControls.joystick.radius) {
+        touchControls.joystick.currentX = pos.x;
+        touchControls.joystick.currentY = pos.y;
+      } else {
+        const angle = Math.atan2(deltaY, deltaX);
+        touchControls.joystick.currentX = joystickBaseX + Math.cos(angle) * touchControls.joystick.radius;
+        touchControls.joystick.currentY = joystickBaseY + Math.sin(angle) * touchControls.joystick.radius;
+      }
+      continue;
+    }
+    
+    // Check rotation mode toggle button
+    const toggleButtonX = canvas.width - 30;
+    const toggleButtonY = 30;
+    if (isPointInCircle(pos.x, pos.y, toggleButtonX, toggleButtonY, 20)) {
+      // Toggle between auto-face and tap-to-rotate modes
+      touchControls.autoFaceMovement = !touchControls.autoFaceMovement;
+      console.log('Rotation mode toggled. Auto-face:', touchControls.autoFaceMovement);
+      continue;
+    }
+    
+    // Check menu toggle button
+    const menuButtonX = canvas.width - 80;
+    const menuButtonY = 30;
+    if (isPointInRect(pos.x, pos.y, menuButtonX - 20, menuButtonY - 15, 40, 30)) {
+      touchControls.showMobileMenu = !touchControls.showMobileMenu;
+      continue;
+    }
+    
+    // Check mobile menu buttons
+    const buttonPressed = getTouchedMobileButton(pos.x, pos.y);
+    if (buttonPressed) {
+      handleMobileButtonPress(buttonPressed);
+      continue;
+    }
+    
+    // Check if tapping on inventory slot
+    const slotIndex = getInventorySlotFromPosition(pos.x, pos.y);
+    if (slotIndex !== -1) {
+      // Double-tap logic: if tapping the same slot twice quickly, use the item
+      const now = Date.now();
+      const timeSinceLastTap = now - (lastInventoryClick?.time || 0);
+      const tappedSameSlot = slotIndex === (lastInventoryClick?.slot || -1);
+      
+      if (tappedSameSlot && timeSinceLastTap < 500) { // 500ms double-tap window
+        // Double-tap: use the item
+        const item = myPlayer?.inventory?.slots[slotIndex];
+        if (item?.type === "consumable") {
+         
+          useItem(slotIndex);
+        }
+      } else {
+        // Single tap: select the slot
+        handleInventorySelection(slotIndex);
+      }
+     // Remember this tap for double-tap detection
+    lastInventoryClick = { slot: slotIndex, time: now };
+    continue; // Don't process as rotation
+  }
+
+  // Check mobile send button (if in chat mode)
+  if (chatMode && isMobileDevice && window.mobileSendButton) {
+      const btn = window.mobileSendButton;
+      if (isPointInRect(pos.x, pos.y, btn.x, btn.y, btn.width, btn.height)) {
+        // Send message if there's text
+        sendChatMessage(chatInput);
+        chatMode = false;
+        chatInput = "";
+        hideMobileKeyboard();
+        continue;
+      }
+    }
+    
+    // Check if tapping outside chat to exit chat mode
+    if (chatMode) {
+      // If we get here, the tap wasn't on the chat input box or send button
+      // Exit chat mode
+      chatMode = false;
+      chatInput = "";
+      hideMobileKeyboard();
+      continue; // Don't process as attack or rotation
+    }
+    
+    // Handle touch attack/rotation (tap anywhere else on screen)
+    if (myPlayer && !chatMode) {
+      // Check if tap is on mobile controls that should prevent attacks
+      let skipAttack = false;
+      
+      if (touchControls.showMobileMenu) {
+        // Check if tap is within the mobile menu area (updated for wider menu)
+        const menuStartY = canvas.height - 320; // Menu height increased for more buttons
+        const menuStartX = canvas.width - 220;  // Menu width increased for wider buttons
+        
+        if (pos.y >= menuStartY && pos.x >= menuStartX) {
+          skipAttack = true;
+        }
+      }
+      
+      // Check if tap is on hamburger menu button
+      const menuButtonX = canvas.width - 80;
+      const menuButtonY = 30;
+      if (isPointInRect(pos.x, pos.y, menuButtonX - 20, menuButtonY - 15, 40, 30)) {
+        skipAttack = true;
+      }
+      
+      // Check if tap is on rotation toggle button
+      const toggleButtonX = canvas.width - 80;
+      const toggleButtonY = 90;
+      if (isPointInRect(pos.x, pos.y, toggleButtonX - 20, toggleButtonY - 15, 40, 30)) {
+        skipAttack = true;
+      }
+      
+      if (!skipAttack) {
+        // First, handle rotation if in tap-to-face mode
+      if (!touchControls.autoFaceMovement && touchControls.tapToRotate) {
+        const worldTouchX = pos.x + camera.x;
+        const worldTouchY = pos.y + camera.y;
+        const dx = worldTouchX - myPlayer.x;
+        const dy = worldTouchY - myPlayer.y;
+        const oldRotation = myPlayer.rotation;
+        myPlayer.rotation = Math.atan2(dy, dx) - Math.PI / 2;
+        
+        socket.emit("playerMovement", {
+          x: myPlayer.x,
+          y: myPlayer.y,
+          rotation: myPlayer.rotation,
+        });
+      }
+      
+      // Then handle attack
+      const activeItem = myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
+      if (activeItem) {
+        if (activeItem.type === "consumable") {
+          useItem(myPlayer.inventory.activeSlot);
+        } else if (activeItem.type === "placeable") {
+          const wallDistance = 69;
+          const angle = myPlayer.rotation + Math.PI / 2;
+          const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
+          const wallY = myPlayer.y + Math.sin(angle) * wallDistance;
+          socket.emit("placeWall", {
+            x: wallX,
+            y: wallY,
+            rotation: myPlayer.rotation + Math.PI / 2,
+          });
+        } else {
+          startAttack();
+        }
+      }
+      } // Close the if (!skipAttack) block
+    }
+  }
+});
+
+canvas.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+  
+  for (let i = 0; i < e.touches.length; i++) {
+    const touch = e.touches[i];
+    const pos = getTouchPos(e, touch);
+    
+    // Update joystick - check if this touch belongs to the joystick
+    if (touchControls.joystick.active && touch.identifier === touchControls.joystick.touchId) {
+      const deltaX = pos.x - touchControls.joystick.startX;
+      const deltaY = pos.y - touchControls.joystick.startY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      // Constrain movement to joystick radius
+      if (distance <= touchControls.joystick.radius) {
+        touchControls.joystick.currentX = pos.x;
+        touchControls.joystick.currentY = pos.y;
+      } else {
+        const angle = Math.atan2(deltaY, deltaX);
+        touchControls.joystick.currentX = touchControls.joystick.startX + Math.cos(angle) * touchControls.joystick.radius;
+        touchControls.joystick.currentY = touchControls.joystick.startY + Math.sin(angle) * touchControls.joystick.radius;
+      }
+      continue;
+    }
+    
+    // Note: Removed rotation from touchmove to prevent accidental rotation while dragging
+    // Rotation now only happens on deliberate taps (touchstart) outside of controls
+  }
+});
+
+canvas.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const touch = e.changedTouches[i];
+    
+    // Reset joystick
+    if (touchControls.joystick.active && touch.identifier === touchControls.joystick.touchId) {
+      touchControls.joystick.active = false;
+      // Return joystick to center
+      touchControls.joystick.currentX = touchControls.joystick.startX;
+      touchControls.joystick.currentY = touchControls.joystick.startY;
+      // Clear the joystick touch ID
+      touchControls.joystick.touchId = null;
+    }
+  }
+});
+
+// Prevent context menu on mobile
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+});
+
+// Helper function to get inventory slot from screen coordinates
+function getInventorySlotFromPosition(x, y) {
+  if (!config.player.inventory.enabled || !myPlayer?.inventory) return -1;
+
+  const inv = config.player.inventory;
+  const slotSize = inv.displayUI.slotSize;
+  const padding = inv.displayUI.padding;
+  const slots = myPlayer.inventory.slots;
+  const startX = (canvas.width - (slotSize + padding) * slots.length) / 2;
+  const startY = canvas.height - slotSize - inv.displayUI.bottomOffset;
+
+  // Check each slot
+  for (let i = 0; i < slots.length; i++) {
+    const slotX = startX + i * (slotSize + padding);
+    const slotY = startY;
+    
+    // Check if point is within this slot
+    if (x >= slotX && x <= slotX + slotSize && 
+        y >= slotY && y <= slotY + slotSize) {
+      return i;
+    }
+  }
+  
+  return -1; // No slot found
+}
+
+// Handle mobile button presses
+function handleMobileButtonPress(buttonKey) {
+  switch(buttonKey) {
+    case 'chat':
+      // Toggle chat mode (same as desktop Enter key)
+      if (!chatMode) {
+        chatMode = true;
+        chatInput = "";
+        // Show mobile keyboard immediately in response to user touch
+        if (isMobileDevice) {
+          // Create and focus input immediately in the touch handler
+          const hiddenInput = document.createElement('input');
+          hiddenInput.type = 'text';
+          hiddenInput.style.position = 'fixed';
+          hiddenInput.style.left = '50%';
+          hiddenInput.style.top = '50%';
+          hiddenInput.style.transform = 'translate(-50%, -50%)';
+          hiddenInput.style.width = '10px';
+          hiddenInput.style.height = '10px';
+          hiddenInput.style.opacity = '0.01';
+          hiddenInput.style.border = 'none';
+          hiddenInput.style.outline = 'none';
+          hiddenInput.style.fontSize = '16px';
+          hiddenInput.style.zIndex = '9999';
+          hiddenInput.autocomplete = 'off';
+          hiddenInput.autocorrect = 'off';
+          hiddenInput.autocapitalize = 'off';
+          hiddenInput.spellcheck = false;
+          
+          document.body.appendChild(hiddenInput);
+          hiddenInput.focus();
+          
+          // Adjust viewport for keyboard with delay
+          setTimeout(() => {
+            adjustViewportForKeyboard();
+          }, 150);
+          
+          // Add event listeners
+          hiddenInput.addEventListener('input', (e) => {
+            if (chatMode) {
+              chatInput = e.target.value;
+            }
+          });
+          
+          hiddenInput.addEventListener('keydown', (e) => {
+            if (!chatMode) return;
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              sendChatMessage(chatInput);
+              chatMode = false;
+              chatInput = "";
+              hideMobileKeyboard();
+            }
+          });
+          
+          hiddenInput.addEventListener('blur', () => {
+            if (chatMode) {
+              setTimeout(() => {
+                if (hiddenInput && chatMode && document.body.contains(hiddenInput)) {
+                  hiddenInput.focus();
+                }
+              }, 10);
+            }
+          });
+          
+          window.mobileKeyboardInput = hiddenInput;
+        }
+      } else {
+        // Send message and exit chat mode
+        sendChatMessage(chatInput);
+        chatMode = false;
+        chatInput = "";
+        hideMobileKeyboard();
+      }
+      break;
+      
+    case 'debug':
+      // Toggle debug panel (equivalent to ';' key)
+      debugPanelVisible = !debugPanelVisible;
+      break;
+      
+    case 'autoAttack':
+      // Toggle auto attack (equivalent to 'e' key)
+      toggleAutoAttack();
+      break;
+      
+    case 'apple':
+      // Quick select apple (equivalent to 'q' key)
+      const appleSlot = myPlayer?.inventory?.slots.findIndex(
+        (item) => item?.id === "apple"
+      );
+      if (appleSlot !== -1) {
+        handleInventorySelection(appleSlot);
+      }
+      break;
+      
+    case 'teleport':
+      // Teleport (equivalent to 't' key) - only works when debug is enabled
+      if (debugPanelVisible) {
+        socket.emit("teleportRequest");
+      }
+      break;
+      
+    case 'collisionDebug':
+      // Toggle collision debug (equivalent to 'p' key) - only works when debug panel is enabled
+      if (debugPanelVisible) {
+        config.collision.debug = !config.collision.debug;
+      }
+      break;
+      
+    case 'weaponDebug':
+      // Toggle weapon debug (equivalent to 'o' key) - only works when debug panel is enabled
+      if (debugPanelVisible) {
+        config.collision.weaponDebug = !config.collision.weaponDebug;
+      }
+      break;
+  }
+}
+
+// Helper function to send chat message and avoid code duplication
+function sendChatMessage(messageText) {
+  if (!messageText || messageText.trim().length === 0) return;
+  
+  const message = messageText.trim().substring(0, config.chat.maxMessageLength);
+  
+  // Show own message immediately
+  playerMessages[socket.id] = {
+    text: message,
+    timestamp: Date.now(),
+  };
+  
+  // Send to server
+  socket.emit("chatMessage", {
+    message: message,
+  });
+}
+
+// Show mobile keyboard for chat input
+function showMobileKeyboard() {
+  // For mobile devices, we'll add an on-screen keyboard or focus tricks
+  if (isMobileDevice) {
+    // Clean up any existing input first
+    if (window.mobileKeyboardInput) {
+      hideMobileKeyboard();
+    }
+    
+    // Create a simple input to trigger mobile keyboard
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'text';
+    hiddenInput.style.position = 'absolute';
+    hiddenInput.style.left = '-999px';
+    hiddenInput.style.top = '-999px';
+    hiddenInput.style.width = '1px';
+    hiddenInput.style.height = '1px';
+    hiddenInput.style.fontSize = '16px'; // Prevent zoom on iOS
+    hiddenInput.autocomplete = 'off';
+    hiddenInput.autocorrect = 'off';
+    hiddenInput.autocapitalize = 'off';
+    hiddenInput.spellcheck = false;
+    hiddenInput.value = chatInput;
+    
+    document.body.appendChild(hiddenInput);
+    hiddenInput.focus();
+    
+    // Adjust viewport for keyboard with a slight delay to ensure keyboard is triggering
+    setTimeout(() => {
+      adjustViewportForKeyboard();
+    }, 150);
+    
+    // Add event listeners
+    hiddenInput.addEventListener('input', (e) => {
+      if (chatMode) {
+        chatInput = e.target.value;
+      }
+    });
+    
+    hiddenInput.addEventListener('blur', () => {
+      if (chatMode && hiddenInput && document.body.contains(hiddenInput)) {
+        setTimeout(() => hiddenInput.focus(), 0);
+      }
+    });
+    
+    // Store reference
+    window.mobileKeyboardInput = hiddenInput;
+  }
+}
+
+// Clean up mobile keyboard
+function hideMobileKeyboard() {
+  if (window.mobileKeyboardInput) {
+    try {
+      window.mobileKeyboardInput.blur();
+      if (window.mobileKeyboardInput.parentNode) {
+        window.mobileKeyboardInput.parentNode.removeChild(window.mobileKeyboardInput);
+      }
+    } catch (e) {
+      console.log('Error removing mobile keyboard input:', e);
+    }
+    window.mobileKeyboardInput = null;
+  }
+  
+  // Reset viewport when keyboard is hidden
+  resetViewportForKeyboard();
+}
+
+// Viewport management for mobile keyboard
+function adjustViewportForKeyboard() {
+  if (isMobileDevice) {
+    // Add viewport meta tag if it doesn't exist
+    let viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+      viewport = document.createElement('meta');
+      viewport.name = 'viewport';
+      document.head.appendChild(viewport);
+    }
+    
+    // Set viewport to prevent zooming and allow proper keyboard handling
+    viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+    
+    // Store original body styles if not already stored
+    if (!window.originalBodyStyles) {
+      window.originalBodyStyles = {
+        height: document.body.style.height,
+        paddingBottom: document.body.style.paddingBottom,
+        overflow: document.body.style.overflow,
+        position: document.body.style.position
+      };
+    }
+    
+    // Prepare body for keyboard
+    document.body.style.height = '100vh';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'relative';
+    
+    // Function to handle viewport changes
+    const handleKeyboardChange = () => {
+      // Use a timeout to ensure the keyboard animation has started
+      setTimeout(() => {
+        if (window.visualViewport) {
+          const keyboardHeight = window.innerHeight - window.visualViewport.height;
+          if (keyboardHeight > 100) { // Keyboard is visible
+            // Push the entire page content up
+            document.body.style.transform = `translateY(-${keyboardHeight}px)`;
+            document.body.style.transition = 'transform 0.3s ease-out';
+            
+            // Also add padding to ensure chat input is visible
+            document.body.style.paddingBottom = `${keyboardHeight}px`;
+          } else {
+            // Keyboard is hidden
+            document.body.style.transform = 'translateY(0px)';
+            document.body.style.paddingBottom = '0px';
+          }
+        } else {
+          // Fallback: detect keyboard by window height change
+          const currentHeight = window.innerHeight;
+          if (!window.mobileOriginalHeight) {
+            window.mobileOriginalHeight = currentHeight;
+          }
+          
+          const heightDiff = window.mobileOriginalHeight - currentHeight;
+          if (heightDiff > 150) { // Keyboard likely visible
+            document.body.style.transform = `translateY(-${heightDiff}px)`;
+            document.body.style.transition = 'transform 0.3s ease-out';
+            document.body.style.paddingBottom = `${heightDiff}px`;
+          } else {
+            document.body.style.transform = 'translateY(0px)';
+            document.body.style.paddingBottom = '0px';
+          }
+        }
+      }, 100);
+    };
+    
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleKeyboardChange);
+      window.mobileViewportHandler = handleKeyboardChange;
+    } else {
+      window.addEventListener('resize', handleKeyboardChange);
+      window.mobileResizeHandler = handleKeyboardChange;
+    }
+    
+    // Trigger initial check
+    handleKeyboardChange();
+  }
+}
+
+function resetViewportForKeyboard() {
+  if (isMobileDevice) {
+    // Reset body styles to original
+    if (window.originalBodyStyles) {
+      document.body.style.height = window.originalBodyStyles.height;
+      document.body.style.paddingBottom = window.originalBodyStyles.paddingBottom;
+      document.body.style.overflow = window.originalBodyStyles.overflow;
+      document.body.style.position = window.originalBodyStyles.position;
+    }
+    
+    // Reset transform
+    document.body.style.transform = 'translateY(0px)';
+    document.body.style.transition = 'transform 0.3s ease-out';
+    
+    // Clean up event listeners
+    if (window.visualViewport && window.mobileViewportHandler) {
+      window.visualViewport.removeEventListener('resize', window.mobileViewportHandler);
+      window.mobileViewportHandler = null;
+    }
+    
+    if (window.mobileResizeHandler) {
+      window.removeEventListener('resize', window.mobileResizeHandler);
+      window.mobileResizeHandler = null;
+    }
+    
+    // Reset after transition
+    setTimeout(() => {
+      document.body.style.transition = '';
+    }, 300);
+  }
 }
