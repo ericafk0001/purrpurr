@@ -442,31 +442,6 @@ function getItemRenderInfo(item, player) {
   return info;
 }
 
-// Update the health update handler
-socket.on("playerHealthUpdate", (data) => {
-  const player = players[data.playerId];
-  if (!player) return;
-
-  // Update player health with validation
-  player.health = Math.max(0, Math.min(data.health, data.maxHealth));
-  player.lastHealthUpdate = data.timestamp;
-
-  if (data.velocity) {
-    player.velocity = data.velocity;
-  }
-
-  // If this is our player, update local state
-  if (data.playerId === socket.id && myPlayer) {
-    myPlayer.health = player.health;
-    if (myPlayer.velocity) {
-      myPlayer.velocity = data.velocity;
-    }
-    if (myPlayer.health < data.health) {
-      showDamageEffect();
-    }
-  }
-});
-
 // Update drawHealthBars function for better visibility
 function drawHealthBars() {
   Object.values(players).forEach((player) => {
