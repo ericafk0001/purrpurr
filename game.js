@@ -1310,14 +1310,14 @@ function toggleAutoAttack() {
 }
 
 // Add near top with other constants
-const TARGET_FPS = 60;
-const FRAME_TIME = 1000 / TARGET_FPS;
 let lastFrameTimestamp = 0;
 
 // Modify gameLoop function
 function gameLoop(timestamp) {
-  // Limit FPS
-  if (timestamp - lastFrameTimestamp < FRAME_TIME) {
+  // Calculate actual frame time for smoother animation
+  const deltaTime = timestamp - lastFrameTimestamp;
+  if (deltaTime < 4) {
+    // Allow up to 250 FPS
     requestAnimationFrame(gameLoop);
     return;
   }
