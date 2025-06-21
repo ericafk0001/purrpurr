@@ -1278,14 +1278,13 @@ function startAttack() {
 
     if (myPlayer) {
       myPlayer.attacking = true;
-      myPlayer.attackStartTime = now;
+      myPlayer.attackStartTime = performance.now();
       myPlayer.attackProgress = 0;
       myPlayer.attackStartRotation = myPlayer.rotation;
       myPlayer.attackDuration = attackDuration;
 
-      // Send exact timing info to server
+      // Send attack info to server without relying on timestamps
       socket.emit("attackStart", {
-        startTime: now,
         duration: attackDuration,
         rotation: myPlayer.rotation,
       });
@@ -1335,17 +1334,15 @@ function gameLoop(timestamp) {
     frameCount = 0;
     lastFpsUpdate = frameTime;
   }
-
   // Update attack animation
   if (isAttacking && myPlayer) {
-    const attackTime = Date.now();
-    const attackElapsed = attackTime - lastAttackTime;
+    const attackTime = performance.now();
+    const attackElapsed = attackTime - myPlayer.attackStartTime;
 
     if (attackElapsed <= attackDuration) {
       // Update animation progress
       attackAnimationProgress = Math.min(1, attackElapsed / attackDuration);
       myPlayer.attackProgress = attackAnimationProgress;
-      myPlayer.attackStartTime = lastAttackTime;
     } else {
       // End attack animation
       isAttacking = false;
@@ -1362,9 +1359,8 @@ function gameLoop(timestamp) {
       }
     }
   }
-
   // Update attack animations for all players including local player
-  const animTime = Date.now();
+  const animTime = performance.now();
   Object.values(players).forEach((player) => {
     if (!player.attacking || !player.attackStartTime) return;
 
@@ -1731,7 +1727,7 @@ window.addEventListener("mousedown", (e) => {
 socket.on("playerAttackStart", (data) => {
   if (players[data.id]) {
     players[data.id].attacking = true;
-    players[data.id].attackStartTime = data.startTime;
+    players[data.id].attackStartTime = performance.now();
     players[data.id].attackProgress = 0;
     players[data.id].attackStartRotation = data.rotation;
     players[data.id].attackDuration = data.duration;
