@@ -143,6 +143,7 @@ socket.on("playerMoved", (playerInfo) => {
       attacking: player.attacking, // Preserve local attack state
       attackProgress: player.attackProgress,
       attackStartTime: player.attackStartTime,
+      velocity: player.velocity || { x: 0, y: 0 }, // Preserve velocity
       attackStartRotation: player.attackStartRotation, // Preserve attack rotation
     };
   }
@@ -467,9 +468,16 @@ socket.on("playerHealthUpdate", (data) => {
   player.health = Math.max(0, Math.min(data.health, data.maxHealth));
   player.lastHealthUpdate = data.timestamp;
 
+  if (data.velocity) {
+    player.velocity = data.velocity;
+  }
+
   // If this is our player, update local state
   if (data.playerId === socket.id && myPlayer) {
     myPlayer.health = player.health;
+    if (myPlayer.velocity) {
+      myPlayer.velocity = data.velocity;
+    }
     if (myPlayer.health < data.health) {
       showDamageEffect();
     }
@@ -777,6 +785,19 @@ function updatePosition() {
 
   // Don't allow movement if dead
   if (myPlayer.isDead) return;
+
+  // Apply velocity
+  if (myPlayer.velocity) {
+    myPlayer.x += myPlayer.velocity.x;
+    myPlayer.y += myPlayer.velocity.y;
+
+    // Apply velocity decay
+    myPlayer.velocity.x *= 0.9;
+    myPlayer.velocity.y *= 0.9;
+
+    if (Math.abs(myPlayer.velocity.x) < 0.1) myPlayer.velocity.x = 0;
+    if (Math.abs(myPlayer.velocity.y) < 0.1) myPlayer.velocity.y = 0;
+  }
 
   let dx = 0;
   let dy = 0;
@@ -1677,27 +1698,8 @@ window.addEventListener("mousedown", (e) => {
       return; // Don't process as attack
     }
     
-    // Not clicking inventory, handle normal attack/use
-    const activeItem =
-      myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
-    if (!activeItem) return;
-
-    if (activeItem.type === "consumable") {
-      useItem(myPlayer.inventory.activeSlot);
-    } else if (activeItem.type === "placeable") {
-      // Calculate wall position in front of player
-      const wallDistance = 69; // Distance from player center
-      const angle = myPlayer.rotation + Math.PI / 2; // Player's facing angle
-      const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
-      const wallY = myPlayer.y + Math.sin(angle) * wallDistance; // Request wall placement from server - rotate wall 90 degrees to match player orientation
-      socket.emit("placeWall", {
-        x: wallX,
-        y: wallY,
-        rotation: myPlayer.rotation + Math.PI / 2, // Rotate wall 90 degrees to match player orientation
-      });
-    } else {
-      startAttack();
-    }
+    // Not clicking inventory, use unified attack handler
+    handleAttackAction();
   }
 });
 
@@ -1731,24 +1733,6 @@ socket.on("playerAttackEnd", (data) => {
 let lastServerSync = Date.now();
 let needsPositionReconciliation = false;
 let correctedPosition = null;
-
-// Add improved socket handlers for synchronization
-socket.on("playerHealthUpdate", (data) => {
-  const player = players[data.playerId];
-  if (!player) return;
-
-  // Update player health with validation
-  player.health = Math.max(0, Math.min(data.health, data.maxHealth));
-  player.lastHealthUpdate = data.timestamp;
-
-  // If this is our player, update local state
-  if (data.playerId === socket.id && myPlayer) {
-    myPlayer.health = player.health;
-    if (myPlayer.health < data.health) {
-      showDamageEffect();
-    }
-  }
-});
 
 // Add handler for death events
 socket.on("playerDied", (data) => {
@@ -2353,25 +2337,8 @@ canvas.addEventListener("touchstart", (e) => {
         });
       }
       
-      // Then handle attack
-      const activeItem = myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
-      if (activeItem) {
-        if (activeItem.type === "consumable") {
-          useItem(myPlayer.inventory.activeSlot);
-        } else if (activeItem.type === "placeable") {
-          const wallDistance = 69;
-          const angle = myPlayer.rotation + Math.PI / 2;
-          const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
-          const wallY = myPlayer.y + Math.sin(angle) * wallDistance;
-          socket.emit("placeWall", {
-            x: wallX,
-            y: wallY,
-            rotation: myPlayer.rotation + Math.PI / 2,
-          });
-        } else {
-          startAttack();
-        }
-      }
+      // Then handle attack - use unified attack handler
+      handleAttackAction();
       } // Close the if (!skipAttack) block
     }
   }
@@ -2454,6 +2421,30 @@ function getInventorySlotFromPosition(x, y) {
   }
   
   return -1; // No slot found
+}
+
+// Unified attack handler for both desktop and mobile
+function handleAttackAction() {
+  const activeItem = myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
+  if (!activeItem) return;
+
+  if (activeItem.type === "consumable") {
+    useItem(myPlayer.inventory.activeSlot);
+  } else if (activeItem.type === "placeable") {
+    // Calculate wall position in front of player
+    const wallDistance = 69; // Distance from player center
+    const angle = myPlayer.rotation + Math.PI / 2; // Player's facing angle
+    const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
+    const wallY = myPlayer.y + Math.sin(angle) * wallDistance;
+    // Request wall placement from server - rotate wall 90 degrees to match player orientation
+    socket.emit("placeWall", {
+      x: wallX,
+      y: wallY,
+      rotation: myPlayer.rotation + Math.PI / 2, // Rotate wall 90 degrees to match player orientation
+    });
+  } else {
+    startAttack();
+  }
 }
 
 // Handle mobile button presses
