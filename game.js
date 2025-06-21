@@ -780,8 +780,8 @@ function clampWithEasing(value, min, max) {
 }
 
 // update updatePosition function
-function updatePosition() {
-  if (!myPlayer) return;
+function updatePosition(deltaTime) {
+  if (!myPlayer || myPlayer.isDead) return;
 
   // Handle position correction from server
   if (needsPositionReconciliation && correctedPosition) {
@@ -790,20 +790,18 @@ function updatePosition() {
     myPlayer.rotation = correctedPosition.rotation;
     needsPositionReconciliation = false;
     correctedPosition = null;
-    return; // Skip normal movement this frame
+    return;
   }
 
-  // Don't allow movement if dead
-  if (myPlayer.isDead) return;
-
-  // Apply velocity
+  // Apply velocity with deltaTime scaling
   if (myPlayer.velocity) {
-    myPlayer.x += myPlayer.velocity.x;
-    myPlayer.y += myPlayer.velocity.y;
+    myPlayer.x += myPlayer.velocity.x * deltaTime;
+    myPlayer.y += myPlayer.velocity.y * deltaTime;
 
     // Apply velocity decay
-    myPlayer.velocity.x *= 0.9;
-    myPlayer.velocity.y *= 0.9;
+    const decay = Math.pow(0.9, deltaTime * 60); // Scale decay with deltaTime
+    myPlayer.velocity.x *= decay;
+    myPlayer.velocity.y *= decay;
 
     if (Math.abs(myPlayer.velocity.x) < 0.1) myPlayer.velocity.x = 0;
     if (Math.abs(myPlayer.velocity.y) < 0.1) myPlayer.velocity.y = 0;
@@ -827,8 +825,9 @@ function updatePosition() {
     dy *= normalizer;
   }
 
-  dx *= config.moveSpeed;
-  dy *= config.moveSpeed;
+  // Scale movement by deltaTime
+  dx *= config.moveSpeed * deltaTime;
+  dy *= config.moveSpeed * deltaTime;
 
   const { dx: slidingDx, dy: slidingDy } = handleCollisions(dx, dy);
 
@@ -837,555 +836,56 @@ function updatePosition() {
 
   if (newX > 0 && newX < config.worldWidth) myPlayer.x = newX;
   if (newY > 0 && newY < config.worldHeight) myPlayer.y = newY;
+
   resolvePlayerCollisions();
   resolveCollisionPenetration();
-  resolveWallCollisions(); // Add wall collision resolution
+  resolveWallCollisions();
 
-  socket.emit("playerMovement", {
-    x: myPlayer.x,
-    y: myPlayer.y,
-    rotation: myPlayer.rotation,
-  });
+  // Save predicted position
+  predictedPosition.x = myPlayer.x;
+  predictedPosition.y = myPlayer.y;
 }
 
-function resolveCollisionPenetration() {
-  if (!myPlayer) return;
+// Add near the top with other constants
+const SERVER_TICKRATE = 20; // Server ticks per second
+const SERVER_UPDATE_INTERVAL = 1000 / SERVER_TICKRATE;
+let lastServerUpdate = 0;
+let predictedPosition = { x: 0, y: 0 };
 
-  const playerCircle = {
-    x: myPlayer.x,
-    y: myPlayer.y,
-    radius: config.collision.sizes.player,
-  };
+// Replace the gameLoop function
+function gameLoop(timestamp) {
+  // Calculate deltaTime
+  const deltaTime = Math.min((timestamp - lastFrameTime) / 1000, 0.1); // Cap at 100ms
+  lastFrameTime = timestamp;
 
-  // Trees and stones are static obstacles
-  const staticObstacles = [
-    ...trees.map((tree) => ({
-      x: tree.x,
-      y: tree.y,
-      radius: config.collision.sizes.tree,
-      type: "tree",
-    })),
-    ...stones.map((stone) => ({
-      x: stone.x,
-      y: stone.y,
-      radius: config.collision.sizes.stone,
-      type: "stone",
-    })),
-  ];
-
-  let totalPushX = 0;
-  let totalPushY = 0;
-  let pushCount = 0;
-
-  for (const obstacle of staticObstacles) {
-    const dx = playerCircle.x - obstacle.x;
-    const dy = playerCircle.y - obstacle.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const minDist = playerCircle.radius + obstacle.radius;
-
-    if (distance < minDist && distance > 0) {
-      const penetrationDepth = minDist - distance;
-      const pushX = (dx / distance) * penetrationDepth;
-      const pushY = (dy / distance) * penetrationDepth;
-
-      totalPushX += pushX;
-      totalPushY += pushY;
-      pushCount++;
-    }
+  // FPS counter update
+  frameCount++;
+  if (timestamp - lastFpsUpdate > FPS_UPDATE_INTERVAL) {
+    currentFps = Math.round((frameCount * 1000) / (timestamp - lastFpsUpdate));
+    frameCount = 0;
+    lastFpsUpdate = timestamp;
   }
 
-  // Apply average push with damping
-  if (pushCount > 0) {
-    const dampingFactor = 0.8;
-    myPlayer.x += (totalPushX / pushCount) * dampingFactor;
-    myPlayer.y += (totalPushY / pushCount) * dampingFactor;
-
-    // Ensure we stay within bounds with smooth clamping
-    myPlayer.x = clampWithEasing(
-      myPlayer.x,
-      config.collision.sizes.player,
-      config.worldWidth - config.collision.sizes.player
-    );
-    myPlayer.y = clampWithEasing(
-      myPlayer.y,
-      config.collision.sizes.player,
-      config.worldHeight - config.collision.sizes.player
-    );
-  }
-}
-
-function drawCollisionCircles() {
-  ctx.strokeStyle = config.collision.debugColor;
-  ctx.lineWidth = 2;
-
-  // player collision circles
-  Object.values(players).forEach((player) => {
-    ctx.beginPath();
-    ctx.arc(
-      player.x - camera.x,
-      player.y - camera.y,
-      config.collision.sizes.player,
-      0,
-      Math.PI * 2
-    );
-    ctx.stroke();
-  });
-
-  // tree collision circles
-  trees.forEach((tree) => {
-    if (isInViewport(tree)) {
-      ctx.beginPath();
-      ctx.arc(
-        tree.x - camera.x,
-        tree.y - camera.y,
-        config.collision.sizes.tree,
-        0,
-        Math.PI * 2
-      );
-      ctx.stroke();
-    }
-  });
-
-  // stone collision circles
-  stones.forEach((stone) => {
-    if (isInViewport(stone)) {
-      ctx.beginPath();
-      ctx.arc(
-        stone.x - camera.x,
-        stone.y - camera.y,
-        config.collision.sizes.stone,
-        0,
-        Math.PI * 2
-      );
-      ctx.stroke();
-    }
-  });
-
-  // Add wall collision circles
-  walls.forEach((wall) => {
-    if (isInViewport(wall)) {
-      ctx.beginPath();
-      ctx.arc(
-        wall.x - camera.x,
-        wall.y - camera.y,
-        config.collision.sizes.wall,
-        0,
-        Math.PI * 2
-      );
-      ctx.stroke();
-    }
-  });
-
-  // Draw weapon hitboxes if enabled
-  if (config.collision.weaponDebug) {
-    Object.values(players).forEach((player) => {
-      if (player.inventory && player.inventory.slots) {
-        const activeItem = player.inventory.slots[player.inventory.activeSlot];
-
-        if (activeItem && activeItem.id === "hammer") {
-          // Calculate weapon range around player based on facing direction
-          const weaponRange = items.hammer.range || 120;
-
-          // Get player's facing angle
-          const playerAngle = player.rotation + Math.PI / 2;
-
-          // Calculate the center of the weapon hitbox in front of player
-          const hitboxX = player.x + Math.cos(playerAngle) + weaponRange / 2;
-          const hitboxY = player.y + Math.sin(playerAngle) + weaponRange / 2;
-
-          // Draw weapon hitbox
-          ctx.fillStyle = config.collision.weaponDebugColor;
-
-          // Draw arc showing attack range and angle
-          ctx.beginPath();
-          // 120 degree arc in front (PI/3 on each side)
-          const startAngle = playerAngle - Math.PI / 3;
-          const endAngle = playerAngle + Math.PI / 3;
-          ctx.moveTo(player.x - camera.x, player.y - camera.y);
-          ctx.arc(
-            player.x - camera.x,
-            player.y - camera.y,
-            weaponRange,
-            startAngle,
-            endAngle
-          );
-          ctx.closePath();
-          ctx.fill();
-
-          // Draw outline
-          ctx.strokeStyle = "rgba(255, 255, 0, 0.8)";
-          ctx.stroke();
-
-          // If attacking, highlight the active area
-          if (player.attacking) {
-            ctx.fillStyle = "rgba(255, 100, 0, 0.4)";
-            ctx.beginPath();
-            ctx.arc(
-              player.x - camera.x,
-              player.y - camera.y,
-              weaponRange,
-              startAngle,
-              endAngle
-            );
-            ctx.closePath();
-            ctx.fill();
-          }
-        }
-      }
-    });
-  }
-}
-
-let chatMode = false;
-let chatInput = "";
-let playerMessages = {}; // store messages for each player
-
-// chat message handling
-socket.on("playerMessage", (messageData) => {
-  playerMessages[messageData.playerId] = {
-    text: messageData.message,
-    timestamp: Date.now(),
-  };
-});
-
-function drawChatBubble(player) {
-  const message = playerMessages[player.id];
-  if (!message) return;
-
-  // check if message is still valid (not expired)
-  if (Date.now() - message.timestamp > config.chat.bubbleDisplayTime) {
-    delete playerMessages[player.id];
-    return;
-  }
-
-  const bubbleX = player.x - camera.x;
-  const bubbleY = player.y - camera.y - config.playerRadius - 30;
-  const bubbleWidth = Math.max(60, message.text.length * 8);
-  const bubbleHeight = 25;
-
-  // draw bubble background
-  ctx.fillStyle = config.chat.bubbleColor;
-  ctx.fillRect(bubbleX - bubbleWidth / 2, bubbleY, bubbleWidth, bubbleHeight);
-
-  // draw text
-  ctx.fillStyle = config.chat.textColor;
-  ctx.font = "12px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(message.text, bubbleX, bubbleY + 16);
-}
-
-function drawChatInput() {
-  // Only draw chat input when in chat mode
-  if (!chatMode) return;
-
-  const inputBoxX = 10;
-  const inputBoxY = canvas.height - 40;
-  const inputBoxWidth = canvas.width - 20;
-  const inputBoxHeight = 30;
-
-  // Active chat input
-  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-  ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
-
-  // Draw a border to make it look more clickable
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
-
-  // Store chat input box position for click detection
-  window.chatInputBox = {
-    x: inputBoxX,
-    y: inputBoxY,
-    width: inputBoxWidth,
-    height: inputBoxHeight,
-  };
-
-  // On mobile, add a send button
-  if (isMobileDevice) {
-    const sendButtonWidth = 60;
-    const sendButtonX = canvas.width - 70;
-    const sendButtonY = canvas.height - 35;
-
-    // Draw send button
-    ctx.fillStyle =
-      chatInput.trim().length > 0
-        ? "rgba(100, 255, 100, 0.8)"
-        : "rgba(150, 150, 150, 0.8)";
-    ctx.fillRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
-
-    // Draw send button border
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
-
-    // Draw send button text
-    ctx.fillStyle = "black";
-    ctx.font = "12px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("SEND", sendButtonX + sendButtonWidth / 2, sendButtonY + 14);
-
-    // Store send button position for touch detection
-    window.mobileSendButton = {
-      x: sendButtonX,
-      y: sendButtonY,
-      width: sendButtonWidth,
-      height: 20,
-    };
-
-    // Adjust chat input area to not overlap with send button
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
-
-    // Update chat input box to exclude send button area
-    window.chatInputBox.width = sendButtonX - inputBoxX - 5;
-  } else {
-    // Desktop version (original)
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
-  }
-}
-
-// Draw the inventory UI
-function drawInventory() {
-  if (!config.player.inventory.enabled || !myPlayer?.inventory) return;
-
-  const inv = config.player.inventory;
-  const slotSize = inv.displayUI.slotSize;
-  const padding = inv.displayUI.padding;
-  const slots = myPlayer.inventory.slots;
-  const startX = (canvas.width - (slotSize + padding) * slots.length) / 2;
-  const startY = canvas.height - slotSize - inv.displayUI.bottomOffset;
-
-  // Draw all slots
-  slots.forEach((item, i) => {
-    const x = startX + i * (slotSize + padding);
-    const y = startY;
-    const isSelected = i === myPlayer.inventory.activeSlot;
-
-    // Draw slot background (back to simple style)
-    ctx.fillStyle = isSelected
-      ? "rgba(100, 100, 100, 0.5)"
-      : inv.displayUI.backgroundColor;
-    ctx.strokeStyle = isSelected
-      ? inv.displayUI.selectedBorderColor
-      : inv.displayUI.borderColor;
-    ctx.lineWidth = inv.displayUI.borderWidth;
-
-    // Draw slot
-    ctx.beginPath();
-    ctx.roundRect(x, y, slotSize, slotSize, inv.displayUI.cornerRadius);
-    ctx.fill();
-    ctx.stroke();
-
-    // Draw item if exists
-    if (item && assets[item.id]) {
-      // Handle aspect ratio for non-square images
-      let drawWidth = slotSize - 10;
-      let drawHeight = slotSize - 10;
-
-      if (item.renderOptions?.width && item.renderOptions?.height) {
-        const ratio = item.renderOptions.width / item.renderOptions.height;
-        if (ratio > 1) {
-          drawHeight = drawWidth / ratio;
-        } else {
-          drawWidth = drawHeight * ratio;
-        }
-      }
-
-      // Center the item in the slot
-      const itemX = x + 5 + (slotSize - 10 - drawWidth) / 2;
-      const itemY = y + 5 + (slotSize - 10 - drawHeight) / 2;
-
-      ctx.drawImage(assets[item.id], itemX, itemY, drawWidth, drawHeight);
-    }
-
-    // Draw slot number
-    ctx.fillStyle = "white";
-    ctx.font = "14px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(`${i + 1}`, x + 5, y + 15);
-  });
-}
-
-// Replace the handleInventorySelection function
-function handleInventorySelection(index) {
-  if (!myPlayer?.inventory) return;
-
-  // Validate slot index
-  if (index < 0 || index >= myPlayer.inventory.slots.length) return;
-
-  const newSlotItem = myPlayer.inventory.slots[index];
-
-  // Update active slot
-  myPlayer.inventory.activeSlot = index;
-  myPlayer.inventory.selectedItem = newSlotItem;
-
-  // Check if switching to a weapon slot while auto-attack is enabled
-  if (autoAttackEnabled && newSlotItem?.id === "hammer") {
-    // Force start a new attack sequence
-    isAttacking = false;
-    lastAttackTime = 0;
-    startAttack();
-  }
-
-  // Notify server of slot change
-  socket.emit("inventorySelect", { slot: index });
-}
-
-// Add item use event handler after other socket handlers
-socket.on("itemUsed", (data) => {
-  if (data.id === socket.id && data.itemId === "apple" && data.success) {
-    // Only switch back to hammer if healing was successful
-    handleInventorySelection(0);
-  }
-});
-
-// Add useItem function
-function useItem(slot) {
-  if (!myPlayer?.inventory?.slots[slot]) return;
-
-  const item = myPlayer.inventory.slots[slot];
-  if (item.type === "consumable") {
-    socket.emit("useItem", { slot });
-    // Let server event handler switch back to hammer
-  }
-}
-
-// Modify startAttack function
-function startAttack() {
-  if (!canAutoAttackWithCurrentItem()) return;
-
-  const now = Date.now();
-  const cooldown = items.hammer.cooldown || 800;
-  lastAttackAttempt = now;
-
-  // Check if we're in cooldown
-  const timeSinceLastAttack = now - lastAttackTime;
-
-  // Allow attack if either cooldown is finished or we're in buffer window
-  if (
-    timeSinceLastAttack > cooldown ||
-    (timeSinceLastAttack > cooldown - ATTACK_BUFFER_WINDOW &&
-      lastAttackAttempt > lastAttackTime)
-  ) {
-    isAttacking = true;
-    lastAttackTime = now;
-    attackAnimationProgress = 0;
-
+  // Server tick simulation
+  if (timestamp - lastServerUpdate >= SERVER_UPDATE_INTERVAL) {
     if (myPlayer) {
-      myPlayer.attacking = true;
-      myPlayer.attackStartTime = performance.now();
-      myPlayer.attackProgress = 0;
-      myPlayer.attackStartRotation = myPlayer.rotation;
-      myPlayer.attackDuration = attackDuration;
-
-      // Send attack info to server without relying on timestamps
-      socket.emit("attackStart", {
-        duration: attackDuration,
+      // Send predicted position to server
+      socket.emit("playerMovement", {
+        x: myPlayer.x,
+        y: myPlayer.y,
         rotation: myPlayer.rotation,
+        timestamp: timestamp,
       });
     }
+    lastServerUpdate = timestamp;
   }
-}
 
-// Add new helper function for auto-attack resume logic
-function checkAutoAttackResume() {
-  if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-    // Start attacking if we switched to a valid weapon
-    startAttack();
-  }
-}
-
-// Update toggle auto attack function
-function toggleAutoAttack() {
-  autoAttackEnabled = !autoAttackEnabled;
-
-  if (autoAttackEnabled) {
-    checkAutoAttackResume();
-  }
-}
-
-// Add frame timing constants
-const TARGET_FPS = 60;
-const FRAME_TIME = 1000 / TARGET_FPS;
-let lastFrameTimestamp = 0;
-
-// Modify gameLoop function
-function gameLoop(timestamp) {
-  // Properly limit to 60 FPS using high resolution timestamps
-  const elapsed = timestamp - lastFrameTimestamp;
-  if (elapsed < FRAME_TIME) {
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-  lastFrameTimestamp = timestamp - (elapsed % FRAME_TIME); // Maintain phase with display refresh
-
-  const frameTime = performance.now();
-  const frameDelta = frameTime - lastFrameTime;
-  lastFrameTime = frameTime;
-  lastFrameTimestamp = timestamp;
-  frameCount++;
-
-  // Update FPS counter at intervals
-  if (frameTime - lastFpsUpdate > FPS_UPDATE_INTERVAL) {
-    currentFps = Math.round((frameCount * 1000) / (frameTime - lastFpsUpdate));
-    frameCount = 0;
-    lastFpsUpdate = frameTime;
-  }
-  // Update attack animation
-  if (isAttacking && myPlayer) {
-    const attackTime = performance.now();
-    const attackElapsed = attackTime - myPlayer.attackStartTime;
-
-    if (attackElapsed <= attackDuration) {
-      // Update animation progress
-      attackAnimationProgress = Math.min(1, attackElapsed / attackDuration);
-      myPlayer.attackProgress = attackAnimationProgress;
-    } else {
-      // End attack animation
-      isAttacking = false;
-      myPlayer.attacking = false;
-      myPlayer.attackProgress = 0;
-      myPlayer.attackStartTime = null;
-      myPlayer.attackStartRotation = null;
-
-      // Queue next attack only if auto-attack is enabled and we have valid weapon
-      if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-        const cooldownRemaining =
-          (items.hammer.cooldown || 800) - attackDuration;
-        setTimeout(startAttack, Math.max(0, cooldownRemaining));
-      }
-    }
-  }
-  // Update attack animations for all players including local player
-  const animTime = performance.now();
-  Object.values(players).forEach((player) => {
-    if (!player.attacking || !player.attackStartTime) return;
-
-    const elapsed = animTime - player.attackStartTime;
-    const duration = player.attackDuration || attackDuration;
-
-    if (elapsed <= duration) {
-      // Ensure smooth animation progress between 0 and 1
-      player.attackProgress = Math.min(1, elapsed / duration);
-    } else {
-      // End animation
-      player.attacking = false;
-      player.attackProgress = 0;
-      player.attackStartTime = null;
-      player.attackStartRotation = null;
-      player.attackDuration = null;
-    }
-  });
-
-  updatePosition();
+  // Update game state
+  updatePosition(deltaTime);
   updateRotation();
   updateCamera();
   drawPlayers();
+
   requestAnimationFrame(gameLoop);
 }
 
@@ -1750,40 +1250,6 @@ socket.on("playerAttackEnd", (data) => {
 let lastServerSync = Date.now();
 let needsPositionReconciliation = false;
 let correctedPosition = null;
-
-// Add handler for death events
-socket.on("playerDied", (data) => {
-  if (players[data.playerId]) {
-    players[data.playerId].health = 0;
-    players[data.playerId].isDead = true;
-
-    // If local player died, show death screen
-    if (data.playerId === socket.id && myPlayer) {
-      myPlayer.health = 0;
-      myPlayer.isDead = true;
-      showDeathScreen();
-    }
-  }
-});
-
-// Add handler for respawn events
-socket.on("playerRespawned", (data) => {
-  if (players[data.playerId]) {
-    players[data.playerId].x = data.x;
-    players[data.playerId].y = data.y;
-    players[data.playerId].health = data.health;
-    players[data.playerId].isDead = false;
-
-    // If local player respawned, update local state
-    if (data.playerId === socket.id) {
-      myPlayer.x = data.x;
-      myPlayer.y = data.y;
-      myPlayer.health = data.health;
-      myPlayer.isDead = false;
-      hideDeathScreen();
-    }
-  }
-});
 
 // Add handler for position correction from server
 socket.on("positionCorrection", (correctPos) => {
