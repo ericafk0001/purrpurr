@@ -30,6 +30,31 @@ const trees = [];
 const stones = [];
 const walls = []; // Add this line to track walls
 
+// Helper function to broadcast player health updates
+function broadcastHealthUpdate(playerId) {
+  const player = players[playerId];
+  if (!player) return;
+
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: config.player.health.max,
+    timestamp: Date.now(),
+    velocity: player.velocity,
+  });
+}
+
+// Helper function to broadcast inventory updates
+function broadcastInventoryUpdate(playerId) {
+  const player = players[playerId];
+  if (!player) return;
+
+  io.emit("playerInventoryUpdate", {
+    id: playerId,
+    inventory: player.inventory,
+  });
+}
+
 // Health system utility functions
 function damagePlayer(playerId, amount, attacker) {
   const player = players[playerId];
@@ -55,14 +80,8 @@ function damagePlayer(playerId, amount, attacker) {
     }
   }
 
-  // Broadcast health update with velocity
-  io.emit("playerHealthUpdate", {
-    playerId,
-    health: player.health,
-    maxHealth: config.player.health.max,
-    timestamp: Date.now(),
-    velocity: player.velocity,
-  });
+  // Broadcast health update
+  broadcastHealthUpdate(playerId);
 
   if (player.health <= 0 && oldHealth > 0) {
     handlePlayerDeath(playerId);
@@ -83,12 +102,7 @@ function healPlayer(playerId, amount) {
   player.health = Math.min(config.player.health.max, player.health + amount);
 
   // Broadcast health update
-  io.emit("playerHealthUpdate", {
-    playerId,
-    health: player.health,
-    maxHealth: config.player.health.max,
-    timestamp: Date.now(),
-  });
+  broadcastHealthUpdate(playerId);
 
   return player.health > oldHealth; // Return true if any healing was applied
 }
@@ -543,10 +557,7 @@ io.on("connection", (socket) => {
       player.inventory.activeSlot = data.slot;
 
       // Broadcast inventory update to all clients
-      io.emit("playerInventoryUpdate", {
-        id: socket.id,
-        inventory: player.inventory,
-      });
+      broadcastInventoryUpdate(socket.id);
     }
   });
 
@@ -583,10 +594,11 @@ io.on("connection", (socket) => {
     player.lastAttackTime = now;
     player.attackProgress = 0;
 
-    // Broadcast attack start with timing info
+    // Broadcast attack start with timing info and rotation
     io.emit("playerAttackStart", {
       id: socket.id,
       startTime: now,
+      rotation: player.rotation, // Include rotation for consistent animation direction
     });
 
     // Process attack immediately instead of waiting
@@ -834,10 +846,7 @@ io.on("connection", (socket) => {
     player.inventory.selectedItem = player.inventory.slots[0];
 
     // Broadcast inventory update
-    io.emit("playerInventoryUpdate", {
-      id: socket.id,
-      inventory: player.inventory,
-    });
+    broadcastInventoryUpdate(socket.id);
   });
 
   // Add after other socket handlers in io.on("connection")
