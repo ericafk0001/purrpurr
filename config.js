@@ -2,7 +2,10 @@ const gameConfig = {
   worldWidth: 5000,
   worldHeight: 5000,
   playerRadius: 60,
-  moveSpeed: 6,
+  moveSpeed: 150, // 3x the original speed (6 * 3 = 18)
+  camera: {
+    smoothing: 0.04 // Lower values = smoother camera (range: 0.01-0.2)
+  },
   colors: {
     player: "red",
     tree: "green",

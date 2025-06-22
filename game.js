@@ -77,12 +77,15 @@ const assets = {
   },
 };
 
-// Add FPS tracking variables
+// Add FPS and timing variables
 let lastFrameTime = performance.now();
 let frameCount = 0;
 let currentFps = 0;
 let lastFpsUpdate = 0;
 const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
+const FIXED_TIMESTEP = 1000 / 60; // 16.67ms for 60 FPS physics
+let accumulatedTime = 0;
+let lastUpdateTime = performance.now();
 
 // enable image smoothing
 ctx.imageSmoothingEnabled = true;
@@ -164,6 +167,13 @@ socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
     // Preserve and update animation state
     const player = players[playerInfo.id];
+    
+    // Store current position as previous position for interpolation
+    const previousPosition = {
+      x: player.x,
+      y: player.y,
+    };
+    
     players[playerInfo.id] = {
       ...playerInfo,
       inventory: playerInfo.inventory || player.inventory,
@@ -172,6 +182,7 @@ socket.on("playerMoved", (playerInfo) => {
       attackStartTime: player.attackStartTime,
       velocity: player.velocity || { x: 0, y: 0 }, // Preserve velocity
       attackStartRotation: player.attackStartRotation, // Preserve attack rotation
+      previousPosition: previousPosition, // Add previous position for interpolation
     };
   }
 });
@@ -232,7 +243,7 @@ socket.on("playerTeleported", (data) => {
     if (data.playerId === socket.id && myPlayer) {
       myPlayer.x = data.x;
       myPlayer.y = data.y;
-      updateCamera();
+      updateCamera(1/60); // Use default timestep for teleport updates
     }
   }
 });
@@ -247,23 +258,32 @@ resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
 
 // camera functions
-const CAMERA_SMOOTHING = 0.08;
+const CAMERA_SMOOTHING = config.camera?.smoothing || 0.04; // Use config value or default to 0.04
+const CAMERA_SMOOTHING_BASE = config.camera?.smoothing || 0.04; // Base smoothing factor to calculate actual smoothing
 const targetCamera = {
   x: 0,
   y: 0,
 };
 
 // Replace the updateCamera function
-function updateCamera() {
+function updateCamera(deltaTime = 1/60) {
   if (!myPlayer) return;
-
+  
+  // Get current rendering position (which may be interpolated)
+  const playerRenderX = myPlayer.renderX !== undefined ? myPlayer.renderX : myPlayer.x;
+  const playerRenderY = myPlayer.renderY !== undefined ? myPlayer.renderY : myPlayer.y;
+  
   // Calculate target camera position (centered on player)
-  targetCamera.x = myPlayer.x - canvas.width / 2;
-  targetCamera.y = myPlayer.y - canvas.height / 2;
+  targetCamera.x = playerRenderX - canvas.width / 2;
+  targetCamera.y = playerRenderY - canvas.height / 2;
 
+  // Calculate frame-rate independent smoothing factor
+  // Lower value = smoother but slower camera
+  const smoothingFactor = 1 - Math.pow(1 - CAMERA_SMOOTHING_BASE, deltaTime * 60);
+  
   // Smoothly interpolate current camera position toward target
-  camera.x += (targetCamera.x - camera.x) * CAMERA_SMOOTHING;
-  camera.y += (targetCamera.y - camera.y) * CAMERA_SMOOTHING;
+  camera.x += (targetCamera.x - camera.x) * smoothingFactor;
+  camera.y += (targetCamera.y - camera.y) * smoothingFactor;
 }
 
 // add after camera object
@@ -358,7 +378,10 @@ function drawPlayers() {
 function drawPlayer(player) {
   if (assets.player && assets.loadStatus.player) {
     ctx.save();
-    ctx.translate(player.x - camera.x, player.y - camera.y);
+    // Use interpolated position if available, otherwise use normal position
+    const renderX = player.renderX !== undefined ? player.renderX : player.x;
+    const renderY = player.renderY !== undefined ? player.renderY : player.y;
+    ctx.translate(renderX - camera.x, renderY - camera.y);
 
     let baseRotation = player.rotation || 0;
 
@@ -772,7 +795,7 @@ function clampWithEasing(value, min, max) {
 }
 
 // update updatePosition function
-function updatePosition() {
+function updatePosition(deltaTime) {
   if (!myPlayer) return;
 
   // Handle position correction from server
@@ -788,14 +811,15 @@ function updatePosition() {
   // Don't allow movement if dead
   if (myPlayer.isDead) return;
 
-  // Apply velocity
+  // Apply velocity with deltaTime for frame-rate independence
   if (myPlayer.velocity) {
-    myPlayer.x += myPlayer.velocity.x;
-    myPlayer.y += myPlayer.velocity.y;
+    myPlayer.x += myPlayer.velocity.x * deltaTime;
+    myPlayer.y += myPlayer.velocity.y * deltaTime;
 
     // Apply velocity decay
-    myPlayer.velocity.x *= 0.9;
-    myPlayer.velocity.y *= 0.9;
+    const decayFactor = Math.pow(0.9, deltaTime * 60); // Scale decay to frame time
+    myPlayer.velocity.x *= decayFactor;
+    myPlayer.velocity.y *= decayFactor;
 
     if (Math.abs(myPlayer.velocity.x) < 0.1) myPlayer.velocity.x = 0;
     if (Math.abs(myPlayer.velocity.y) < 0.1) myPlayer.velocity.y = 0;
@@ -819,8 +843,9 @@ function updatePosition() {
     dy *= normalizer;
   }
 
-  dx *= config.moveSpeed;
-  dy *= config.moveSpeed;
+  // Scale movement by deltaTime for frame-rate independence
+  dx *= config.moveSpeed * deltaTime;
+  dy *= config.moveSpeed * deltaTime;
 
   const { dx: slidingDx, dy: slidingDy } = handleCollisions(dx, dy);
 
@@ -1297,22 +1322,14 @@ function toggleAutoAttack() {
 }
 
 // Add near top with other constants
-const TARGET_FPS = 60;
-const FRAME_TIME = 1000 / TARGET_FPS;
+// Game loop timing variables
 let lastFrameTimestamp = 0;
 
-// Modify gameLoop function
+// Game loop function with fixed timestep physics and variable rendering
 function gameLoop(timestamp) {
-  // Limit FPS
-  if (timestamp - lastFrameTimestamp < FRAME_TIME) {
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-
   const frameTime = performance.now();
   const frameDelta = frameTime - lastFrameTime;
   lastFrameTime = frameTime;
-  lastFrameTimestamp = timestamp;
   frameCount++;
 
   // Update FPS counter at intervals
@@ -1321,6 +1338,29 @@ function gameLoop(timestamp) {
     frameCount = 0;
     lastFpsUpdate = frameTime;
   }
+  
+  // Calculate time since last game update
+  const currentTime = performance.now();
+  let deltaTime = currentTime - lastUpdateTime;
+  
+  // Cap deltaTime to avoid spiral of death
+  if (deltaTime > 200) {
+    deltaTime = 200;
+  }
+  
+  // Accumulate time for fixed timestep updates
+  accumulatedTime += deltaTime;
+  lastUpdateTime = currentTime;
+  
+  // Process game logic in fixed timestep increments
+  while (accumulatedTime >= FIXED_TIMESTEP) {
+    // Update game physics at fixed intervals
+    updateGameLogic(FIXED_TIMESTEP / 1000); // Convert ms to seconds for calculations
+    accumulatedTime -= FIXED_TIMESTEP;
+  }
+  
+  // Calculate interpolation fraction for rendering
+  const interpolation = accumulatedTime / FIXED_TIMESTEP;
 
   // Update attack animation
   if (isAttacking && myPlayer) {
@@ -1349,7 +1389,45 @@ function gameLoop(timestamp) {
     }
   }
 
-  // Update all players' attack animations including local player
+  // Render at interpolated state
+  const cameraDeltaTime = frameDelta / 1000; // Convert ms to seconds
+  updateCamera(cameraDeltaTime);
+  drawPlayers(interpolation);
+  requestAnimationFrame(gameLoop);
+}
+
+// New function for fixed timestep updates
+function updateGameLogic(deltaTime) {
+  if (!myPlayer) return;
+  
+  // Update attack animation for local player
+  if (isAttacking && myPlayer) {
+    const attackTime = Date.now();
+    const attackElapsed = attackTime - lastAttackTime;
+
+    if (attackElapsed <= attackDuration) {
+      // Update animation progress
+      attackAnimationProgress = Math.min(1, attackElapsed / attackDuration);
+      myPlayer.attackProgress = attackAnimationProgress;
+      myPlayer.attackStartTime = lastAttackTime;
+    } else {
+      // End attack animation
+      isAttacking = false;
+      myPlayer.attacking = false;
+      myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = null;
+      myPlayer.attackStartRotation = null;
+
+      // Queue next attack only if auto-attack is enabled and we have valid weapon
+      if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
+        const cooldownRemaining =
+          (items.hammer.cooldown || 800) - attackDuration;
+        setTimeout(startAttack, Math.max(0, cooldownRemaining));
+      }
+    }
+  }
+
+  // Update all players' attack animations
   const animTime = Date.now();
   Object.values(players).forEach((player) => {
     if (!player.attacking || !player.attackStartTime) return;
@@ -1369,11 +1447,9 @@ function gameLoop(timestamp) {
     }
   });
 
-  updatePosition();
+  // Update player position and rotation with fixed timestep
+  updatePosition(deltaTime);
   updateRotation();
-  updateCamera();
-  drawPlayers();
-  requestAnimationFrame(gameLoop);
 }
 
 // Toggle auto attack function
@@ -1575,15 +1651,19 @@ function drawDebugPanel() {
 
   // Draw semi-transparent background
   ctx.fillStyle = "rgba(0, 0, 0, 0.4  )";
-  ctx.fillRect(padding, padding, 200, 190);
+  ctx.fillRect(padding, padding, 200, 210);
 
   // Draw debug info
   ctx.fillStyle = "white";
   ctx.font = "12px monospace";
   ctx.textAlign = "left";
 
+  // Calculate physics update rate
+  const physicsUpdateRate = 60; // Our fixed physics update rate is 60 FPS
+
   const debugInfo = [
-    `FPS: ${currentFps}`,
+    `Render FPS: ${currentFps}`,
+    `Physics FPS: ${physicsUpdateRate}`,
     `Position: ${Math.round(myPlayer.x)}, ${Math.round(myPlayer.y)}`,
     `Health: ${myPlayer.health}/${config.player.health.max}`,
     `Players: ${Object.keys(players).length}`,
@@ -1600,12 +1680,15 @@ function drawDebugPanel() {
 }
 
 // Add debug panel to UI drawing in drawPlayers function
-function drawPlayers() {
+function drawPlayers(interpolation = 1) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Draw background and grid first
   drawBackground();
 
+  // Store previous positions for interpolation if needed
+  const renderObjects = {};
+  
   // Define draw layers with fixed order (no Y-sorting)
   const drawLayers = [
     // Layer 1 - Walls (bottom)
@@ -1614,11 +1697,30 @@ function drawPlayers() {
       .map((wall) => ({ ...wall, type: "wall" })),
 
     // Layer 2 - Players and Stones (middle)
-    ...Object.entries(players).map(([id, player]) => ({
-      ...player,
-      id: id,
-      type: "player",
-    })),
+    ...Object.entries(players).map(([id, player]) => {
+      // Store the player with interpolated position if available
+      if (player.previousPosition && player !== myPlayer) {
+        // Interpolate between previous and current position
+        const interpolatedX = player.previousPosition.x + (player.x - player.previousPosition.x) * interpolation;
+        const interpolatedY = player.previousPosition.y + (player.y - player.previousPosition.y) * interpolation;
+        
+        return {
+          ...player,
+          renderX: interpolatedX,
+          renderY: interpolatedY,
+          id: id,
+          type: "player",
+        };
+      }
+      
+      return {
+        ...player,
+        renderX: player.x,
+        renderY: player.y,
+        id: id,
+        type: "player",
+      };
+    }),
     ...stones
       .filter((stone) => isInViewport(stone))
       .map((stone) => ({ ...stone, type: "stone" })),
