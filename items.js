@@ -19,6 +19,11 @@ const gameItems = {
     equipEffect: {
       moveSpeedMultiplier: 1.0, // Player move speed multiplier when equipped
     },
+    knockback: {
+      force: 340, // Base knockback force
+      duration: 210, // How long knockback lasts in ms
+      decay: 1, // How quickly knockback velocity decays (per frame)
+    },
   },
   apple: {
     id: "apple",

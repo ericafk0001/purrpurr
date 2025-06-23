@@ -60,23 +60,29 @@ function damagePlayer(playerId, amount, attacker) {
   const player = players[playerId];
   if (!player) return false;
 
+  // Get attacker's active weapon
+  const attackerWeapon =
+    attacker?.inventory?.slots[attacker.inventory.activeSlot];
+  const weaponKnockback = attackerWeapon?.knockback || config.player.knockback;
+
   const oldHealth = player.health;
   player.health = Math.max(0, player.health - amount);
   player.lastDamageTime = Date.now();
+
   // Apply knockback if attacker position is available
   if (attacker) {
     const dx = player.x - attacker.x;
     const dy = player.y - attacker.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > 0) {
-      // Use knockback settings from config
-      const knockback = config.player.knockback;
-      player.velocity.x = (dx / dist) * knockback.force;
-      player.velocity.y = (dy / dist) * knockback.force;
+      // Use weapon-specific knockback settings
+      player.velocity.x = (dx / dist) * weaponKnockback.force;
+      player.velocity.y = (dy / dist) * weaponKnockback.force;
 
-      // Set up velocity decay
+      // Set up velocity decay using weapon values
       player.lastKnockbackTime = Date.now();
-      player.knockbackDecay = knockback.decay;
+      player.knockbackDecay = weaponKnockback.decay;
+      player.knockbackDuration = weaponKnockback.duration;
     }
   }
 
@@ -462,10 +468,10 @@ io.on("connection", (socket) => {
   socket.on("playerMovement", (movement) => {
     const player = players[socket.id];
     if (player && !player.isDead) {
-      // Apply velocity decay with knockback configuration
+      // Apply velocity decay with weapon-specific knockback configuration
       if (player.lastKnockbackTime) {
         const elapsed = Date.now() - player.lastKnockbackTime;
-        if (elapsed < config.player.knockback.duration) {
+        if (elapsed < player.knockbackDuration) {
           player.velocity.x *= player.knockbackDecay;
           player.velocity.y *= player.knockbackDecay;
         } else {
@@ -714,6 +720,7 @@ io.on("connection", (socket) => {
         }
 
         if (inArc) {
+          // Pass the entire attacker object so we can access their weapon
           damagePlayer(targetId, weapon.damage || 15, attacker);
           io.emit("playerHit", {
             attackerId: attackerId,
