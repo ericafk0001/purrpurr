@@ -21,11 +21,16 @@ const attackDuration = 250; // Faster animation (reduced from 400ms)
 let autoAttackEnabled = false; // New toggle for auto-attack mode
 
 // Touch and mobile compatibility - improved iPad detection
-let isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-  (navigator.userAgent.toLowerCase().indexOf('macintosh') > -1 && navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+let isMobileDevice =
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  ) ||
+  (navigator.userAgent.toLowerCase().indexOf("macintosh") > -1 &&
+    navigator.maxTouchPoints &&
+    navigator.maxTouchPoints > 2);
 
 // Log mobile detection for debugging
-console.log('Mobile device detected:', isMobileDevice);
+console.log("Mobile device detected:", isMobileDevice);
 let touchControls = {
   joystick: {
     active: false,
@@ -35,13 +40,13 @@ let touchControls = {
     currentY: 0,
     radius: 50,
     deadzone: 10,
-    touchId: null
+    touchId: null,
   },
   // Mobile rotation settings
   autoFaceMovement: true, // Auto-face the direction you're moving
-  tapToRotate: true,      // Tap screen to face that direction
+  tapToRotate: true, // Tap screen to face that direction
   // Mobile UI buttons
-  showMobileMenu: false,  // Toggle for mobile menu
+  showMobileMenu: false, // Toggle for mobile menu
   mobileButtons: {
     chat: { x: 0, y: 0, width: 60, height: 30, label: "CHAT" },
     debug: { x: 0, y: 0, width: 60, height: 30, label: "DEBUG" },
@@ -49,8 +54,8 @@ let touchControls = {
     apple: { x: 0, y: 0, width: 60, height: 30, label: "APPLE" },
     teleport: { x: 0, y: 0, width: 60, height: 30, label: "TP" },
     collisionDebug: { x: 0, y: 0, width: 80, height: 30, label: "COLLISION" },
-    weaponDebug: { x: 0, y: 0, width: 80, height: 30, label: "WEAPON" }
-  }
+    weaponDebug: { x: 0, y: 0, width: 80, height: 30, label: "WEAPON" },
+  },
 };
 let virtualKeys = { w: false, a: false, s: false, d: false };
 
@@ -141,9 +146,17 @@ socket.on("playerHealthUpdate", (data) => {
   const player = players[data.playerId];
   if (!player) return;
 
+  const oldHealth = player.health || 0;
+  const healthDiff = data.health - oldHealth;
+
   // Update player health with validation
   player.health = Math.max(0, Math.min(data.health, data.maxHealth));
   player.lastHealthUpdate = data.timestamp;
+
+  // Only show healing numbers (when health increases)
+  if (healthDiff > 0) {
+    addFloatingNumber(player.x, player.y - 40, healthDiff, "heal");
+  }
 
   // Apply velocity if provided
   if (data.velocity) {
@@ -156,9 +169,6 @@ socket.on("playerHealthUpdate", (data) => {
     if (myPlayer.velocity) {
       myPlayer.velocity = data.velocity;
     }
-    if (myPlayer.health < data.health) {
-      showDamageEffect();
-    }
   }
 });
 
@@ -167,13 +177,13 @@ socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
     // Preserve and update animation state
     const player = players[playerInfo.id];
-    
+
     // Store current position as previous position for interpolation
     const previousPosition = {
       x: player.x,
       y: player.y,
     };
-    
+
     players[playerInfo.id] = {
       ...playerInfo,
       inventory: playerInfo.inventory || player.inventory,
@@ -243,7 +253,7 @@ socket.on("playerTeleported", (data) => {
     if (data.playerId === socket.id && myPlayer) {
       myPlayer.x = data.x;
       myPlayer.y = data.y;
-      updateCamera(1/60); // Use default timestep for teleport updates
+      updateCamera(1 / 60); // Use default timestep for teleport updates
     }
   }
 });
@@ -266,21 +276,24 @@ const targetCamera = {
 };
 
 // Replace the updateCamera function
-function updateCamera(deltaTime = 1/60) {
+function updateCamera(deltaTime = 1 / 60) {
   if (!myPlayer) return;
-  
+
   // Get current rendering position (which may be interpolated)
-  const playerRenderX = myPlayer.renderX !== undefined ? myPlayer.renderX : myPlayer.x;
-  const playerRenderY = myPlayer.renderY !== undefined ? myPlayer.renderY : myPlayer.y;
-  
+  const playerRenderX =
+    myPlayer.renderX !== undefined ? myPlayer.renderX : myPlayer.x;
+  const playerRenderY =
+    myPlayer.renderY !== undefined ? myPlayer.renderY : myPlayer.y;
+
   // Calculate target camera position (centered on player)
   targetCamera.x = playerRenderX - canvas.width / 2;
   targetCamera.y = playerRenderY - canvas.height / 2;
 
   // Calculate frame-rate independent smoothing factor
   // Lower value = smoother but slower camera
-  const smoothingFactor = 1 - Math.pow(1 - CAMERA_SMOOTHING_BASE, deltaTime * 60);
-  
+  const smoothingFactor =
+    1 - Math.pow(1 - CAMERA_SMOOTHING_BASE, deltaTime * 60);
+
   // Smoothly interpolate current camera position toward target
   camera.x += (targetCamera.x - camera.x) * smoothingFactor;
   camera.y += (targetCamera.y - camera.y) * smoothingFactor;
@@ -296,7 +309,7 @@ const mouse = {
 function updateRotation() {
   // Only update rotation based on mouse for desktop devices
   if (!myPlayer || isMobileDevice) return;
-  
+
   const screenMouseX = mouse.x;
   const screenMouseY = mouse.y;
 
@@ -372,6 +385,7 @@ function drawPlayers() {
   drawHealthBars();
   drawInventory();
   drawChatInput();
+  drawFloatingNumbers(); // Add this line before debug panel
   drawDebugPanel(); // Add this line
 }
 
@@ -390,8 +404,11 @@ function drawPlayer(player) {
       let swingAngle = 0;
 
       // Use the rotation from when the attack started for consistent direction
-      const attackRotation = player.attackStartRotation !== undefined ? player.attackStartRotation : baseRotation;
-      
+      const attackRotation =
+        player.attackStartRotation !== undefined
+          ? player.attackStartRotation
+          : baseRotation;
+
       if (player.attackProgress < 0.5) {
         swingAngle = -(player.attackProgress / 0.5) * maxSwingAngle;
       } else {
@@ -399,7 +416,7 @@ function drawPlayer(player) {
           -maxSwingAngle +
           ((player.attackProgress - 0.5) / 0.5) * maxSwingAngle;
       }
-      
+
       // Apply swing to the attack start rotation, not current rotation
       baseRotation = attackRotation + swingAngle;
     }
@@ -1094,16 +1111,16 @@ function drawChatBubble(player) {
 function drawChatInput() {
   // Only draw chat input when in chat mode
   if (!chatMode) return;
-  
+
   const inputBoxX = 10;
   const inputBoxY = canvas.height - 40;
   const inputBoxWidth = canvas.width - 20;
   const inputBoxHeight = 30;
-  
+
   // Active chat input
   ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
   ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
-  
+
   // Draw a border to make it look more clickable
   ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
   ctx.lineWidth = 2;
@@ -1114,7 +1131,7 @@ function drawChatInput() {
     x: inputBoxX,
     y: inputBoxY,
     width: inputBoxWidth,
-    height: inputBoxHeight
+    height: inputBoxHeight,
   };
 
   // On mobile, add a send button
@@ -1122,36 +1139,39 @@ function drawChatInput() {
     const sendButtonWidth = 60;
     const sendButtonX = canvas.width - 70;
     const sendButtonY = canvas.height - 35;
-    
+
     // Draw send button
-    ctx.fillStyle = chatInput.trim().length > 0 ? "rgba(100, 255, 100, 0.8)" : "rgba(150, 150, 150, 0.8)";
+    ctx.fillStyle =
+      chatInput.trim().length > 0
+        ? "rgba(100, 255, 100, 0.8)"
+        : "rgba(150, 150, 150, 0.8)";
     ctx.fillRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
-    
+
     // Draw send button border
     ctx.strokeStyle = "white";
     ctx.lineWidth = 1;
     ctx.strokeRect(sendButtonX, sendButtonY, sendButtonWidth, 20);
-    
+
     // Draw send button text
     ctx.fillStyle = "black";
     ctx.font = "12px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("SEND", sendButtonX + sendButtonWidth/2, sendButtonY + 14);
-    
+    ctx.fillText("SEND", sendButtonX + sendButtonWidth / 2, sendButtonY + 14);
+
     // Store send button position for touch detection
     window.mobileSendButton = {
       x: sendButtonX,
       y: sendButtonY,
       width: sendButtonWidth,
-      height: 20
+      height: 20,
     };
-    
+
     // Adjust chat input area to not overlap with send button
     ctx.fillStyle = "white";
     ctx.font = "16px Arial";
     ctx.textAlign = "left";
     ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
-    
+
     // Update chat input box to exclude send button area
     window.chatInputBox.width = sendButtonX - inputBoxX - 5;
   } else {
@@ -1338,27 +1358,27 @@ function gameLoop(timestamp) {
     frameCount = 0;
     lastFpsUpdate = frameTime;
   }
-  
+
   // Calculate time since last game update
   const currentTime = performance.now();
   let deltaTime = currentTime - lastUpdateTime;
-  
+
   // Cap deltaTime to avoid spiral of death
   if (deltaTime > 200) {
     deltaTime = 200;
   }
-  
+
   // Accumulate time for fixed timestep updates
   accumulatedTime += deltaTime;
   lastUpdateTime = currentTime;
-  
+
   // Process game logic in fixed timestep increments
   while (accumulatedTime >= FIXED_TIMESTEP) {
     // Update game physics at fixed intervals
     updateGameLogic(FIXED_TIMESTEP / 1000); // Convert ms to seconds for calculations
     accumulatedTime -= FIXED_TIMESTEP;
   }
-  
+
   // Calculate interpolation fraction for rendering
   const interpolation = accumulatedTime / FIXED_TIMESTEP;
 
@@ -1399,7 +1419,7 @@ function gameLoop(timestamp) {
 // New function for fixed timestep updates
 function updateGameLogic(deltaTime) {
   if (!myPlayer) return;
-  
+
   // Update attack animation for local player
   if (isAttacking && myPlayer) {
     const attackTime = Date.now();
@@ -1513,15 +1533,18 @@ window.addEventListener("keydown", (e) => {
     if (isMobileDevice && window.mobileKeyboardInput) {
       return; // Let the mobile input handle all typing
     }
-    
+
     if (e.key === "Backspace") {
       chatInput = chatInput.slice(0, -1);
     } else if (e.key.length === 1) {
       chatInput += e.key;
     }
-    
+
     // Sync with mobile keyboard input if it exists
-    if (window.mobileKeyboardInput && window.mobileKeyboardInput.value !== chatInput) {
+    if (
+      window.mobileKeyboardInput &&
+      window.mobileKeyboardInput.value !== chatInput
+    ) {
       window.mobileKeyboardInput.value = chatInput;
     }
     return;
@@ -1688,7 +1711,7 @@ function drawPlayers(interpolation = 1) {
 
   // Store previous positions for interpolation if needed
   const renderObjects = {};
-  
+
   // Define draw layers with fixed order (no Y-sorting)
   const drawLayers = [
     // Layer 1 - Walls (bottom)
@@ -1701,9 +1724,13 @@ function drawPlayers(interpolation = 1) {
       // Store the player with interpolated position if available
       if (player.previousPosition && player !== myPlayer) {
         // Interpolate between previous and current position
-        const interpolatedX = player.previousPosition.x + (player.x - player.previousPosition.x) * interpolation;
-        const interpolatedY = player.previousPosition.y + (player.y - player.previousPosition.y) * interpolation;
-        
+        const interpolatedX =
+          player.previousPosition.x +
+          (player.x - player.previousPosition.x) * interpolation;
+        const interpolatedY =
+          player.previousPosition.y +
+          (player.y - player.previousPosition.y) * interpolation;
+
         return {
           ...player,
           renderX: interpolatedX,
@@ -1712,7 +1739,7 @@ function drawPlayers(interpolation = 1) {
           type: "player",
         };
       }
-      
+
       return {
         ...player,
         renderX: player.x,
@@ -1758,8 +1785,9 @@ function drawPlayers(interpolation = 1) {
   drawHealthBars();
   drawInventory();
   drawChatInput();
+  drawFloatingNumbers(); // Add this line before debug panel
   drawDebugPanel(); // Add this line
-  
+
   // Draw mobile controls for touch devices
   if (isMobileDevice) {
     drawMobileControls();
@@ -1777,7 +1805,7 @@ window.addEventListener("mousedown", (e) => {
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    
+
     // Check if clicking on inventory slot first
     const slotIndex = getInventorySlotFromPosition(mouseX, mouseY);
     if (slotIndex !== -1) {
@@ -1785,8 +1813,9 @@ window.addEventListener("mousedown", (e) => {
       const now = Date.now();
       const timeSinceLastClick = now - (lastInventoryClick?.time || 0);
       const clickedSameSlot = slotIndex === (lastInventoryClick?.slot || -1);
-      
-      if (clickedSameSlot && timeSinceLastClick < 500) { // 500ms double-click window
+
+      if (clickedSameSlot && timeSinceLastClick < 500) {
+        // 500ms double-click window
         // Double-click: use the item
         const item = myPlayer?.inventory?.slots[slotIndex];
         if (item?.type === "consumable") {
@@ -1796,12 +1825,12 @@ window.addEventListener("mousedown", (e) => {
         // Single click: select the slot
         handleInventorySelection(slotIndex);
       }
-      
+
       // Remember this click for double-click detection
       lastInventoryClick = { slot: slotIndex, time: now };
       return; // Don't process as attack
     }
-    
+
     // Not clicking inventory, use unified attack handler
     handleAttackAction();
   }
@@ -1818,9 +1847,10 @@ socket.on("playerAttackStart", (data) => {
     players[data.id].attacking = true;
     players[data.id].attackStartTime = startTime;
     players[data.id].attackProgress = 0;
-    
+
     // Use the rotation from the server for consistent animation direction
-    players[data.id].attackStartRotation = data.rotation !== undefined ? data.rotation : players[data.id].rotation;
+    players[data.id].attackStartRotation =
+      data.rotation !== undefined ? data.rotation : players[data.id].rotation;
   }
 });
 
@@ -1912,24 +1942,6 @@ socket.on("fullStateSync", (data) => {
   lastServerSync = Date.now();
 });
 
-// Visual feedback for damage
-function showDamageEffect() {
-  const overlay = document.createElement("div");
-  overlay.style.position = "fixed";
-  overlay.style.top = 0;
-  overlay.style.left = 0;
-  overlay.style.width = "100%";
-  overlay.style.height = "100%";
-  overlay.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
-  overlay.style.pointerEvents = "none";
-  overlay.style.zIndex = 1000;
-  document.body.appendChild(overlay);
-
-  setTimeout(() => {
-    document.body.removeChild(overlay);
-  }, 200);
-}
-
 // Death screen
 function showDeathScreen() {
   const deathScreen = document.createElement("div");
@@ -2001,7 +2013,7 @@ function resolveWallCollisions() {
 // Touch and mobile control functions
 function getVirtualKeys() {
   if (!isMobileDevice) return keys;
-  
+
   updateVirtualMovement();
   return virtualKeys;
 }
@@ -2011,30 +2023,38 @@ function updateVirtualMovement() {
     virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
     return;
   }
-  
-  const deltaX = touchControls.joystick.currentX - touchControls.joystick.startX;
-  const deltaY = touchControls.joystick.currentY - touchControls.joystick.startY;
+
+  const deltaX =
+    touchControls.joystick.currentX - touchControls.joystick.startX;
+  const deltaY =
+    touchControls.joystick.currentY - touchControls.joystick.startY;
   const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-  
+
   if (distance > touchControls.joystick.deadzone) {
     // Normalize the input but cap it at the joystick radius
     const maxDistance = Math.min(distance, touchControls.joystick.radius);
-    const normalizedX = (deltaX / distance) * (maxDistance / touchControls.joystick.radius);
-    const normalizedY = (deltaY / distance) * (maxDistance / touchControls.joystick.radius);
-    
+    const normalizedX =
+      (deltaX / distance) * (maxDistance / touchControls.joystick.radius);
+    const normalizedY =
+      (deltaY / distance) * (maxDistance / touchControls.joystick.radius);
+
     // Use a lower threshold for smoother 8-directional movement
     const threshold = 0.2;
     virtualKeys.w = normalizedY < -threshold;
     virtualKeys.s = normalizedY > threshold;
     virtualKeys.a = normalizedX < -threshold;
     virtualKeys.d = normalizedX > threshold;
-    
+
     // Auto-face movement direction if enabled
-    if (touchControls.autoFaceMovement && myPlayer && distance > touchControls.joystick.deadzone) {
+    if (
+      touchControls.autoFaceMovement &&
+      myPlayer &&
+      distance > touchControls.joystick.deadzone
+    ) {
       const angle = Math.atan2(deltaY, deltaX) - Math.PI / 2;
       const oldRotation = myPlayer.rotation;
       myPlayer.rotation = angle;
-      
+
       // Send rotation update to server
       socket.emit("playerMovement", {
         x: myPlayer.x,
@@ -2049,37 +2069,51 @@ function updateVirtualMovement() {
 
 function drawMobileControls() {
   if (!isMobileDevice) return;
-  
+
   ctx.save();
-  
+
   // Draw virtual joystick
   const joystickBaseX = 100;
   const joystickBaseY = canvas.height - 100;
-  
+
   // Draw joystick outer ring
   ctx.globalAlpha = 0.4;
   ctx.strokeStyle = "white";
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(joystickBaseX, joystickBaseY, touchControls.joystick.radius, 0, Math.PI * 2);
+  ctx.arc(
+    joystickBaseX,
+    joystickBaseY,
+    touchControls.joystick.radius,
+    0,
+    Math.PI * 2
+  );
   ctx.stroke();
-  
+
   // Draw joystick base
   ctx.globalAlpha = 0.2;
   ctx.fillStyle = "gray";
   ctx.beginPath();
-  ctx.arc(joystickBaseX, joystickBaseY, touchControls.joystick.radius, 0, Math.PI * 2);
+  ctx.arc(
+    joystickBaseX,
+    joystickBaseY,
+    touchControls.joystick.radius,
+    0,
+    Math.PI * 2
+  );
   ctx.fill();
-  
+
   // Draw joystick knob
   let knobX = joystickBaseX;
   let knobY = joystickBaseY;
-  
+
   if (touchControls.joystick.active) {
-    const deltaX = touchControls.joystick.currentX - touchControls.joystick.startX;
-    const deltaY = touchControls.joystick.currentY - touchControls.joystick.startY;
+    const deltaX =
+      touchControls.joystick.currentX - touchControls.joystick.startX;
+    const deltaY =
+      touchControls.joystick.currentY - touchControls.joystick.startY;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
+
     // Constrain knob to joystick radius
     if (distance <= touchControls.joystick.radius) {
       knobX = joystickBaseX + deltaX;
@@ -2090,21 +2124,21 @@ function drawMobileControls() {
       knobY = joystickBaseY + Math.sin(angle) * touchControls.joystick.radius;
     }
   }
-  
+
   // Draw knob shadow
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = "black";
   ctx.beginPath();
   ctx.arc(knobX + 2, knobY + 2, 22, 0, Math.PI * 2);
   ctx.fill();
-  
+
   // Draw knob
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = touchControls.joystick.active ? "#4CAF50" : "white";
   ctx.beginPath();
   ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
   ctx.fill();
-  
+
   // Draw knob border
   ctx.globalAlpha = 1;
   ctx.strokeStyle = "#333";
@@ -2112,46 +2146,52 @@ function drawMobileControls() {
   ctx.beginPath();
   ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
   ctx.stroke();
-  
+
   // Draw rotation mode indicator
   ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
   ctx.font = "14px Arial";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  const modeText = touchControls.autoFaceMovement ? "Auto-Face: ON" : "Tap to Face: ON";
+  const modeText = touchControls.autoFaceMovement
+    ? "Auto-Face: ON"
+    : "Tap to Face: ON";
   ctx.fillText(modeText, 10, 10);
-  
+
   // Draw rotation mode toggle button (small button in top-right)
   const toggleButtonX = canvas.width - 30;
   const toggleButtonY = 30;
-  ctx.fillStyle = touchControls.autoFaceMovement ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 100, 100, 0.8)";
+  ctx.fillStyle = touchControls.autoFaceMovement
+    ? "rgba(100, 255, 100, 0.8)"
+    : "rgba(255, 100, 100, 0.8)";
   ctx.beginPath();
   ctx.arc(toggleButtonX, toggleButtonY, 20, 0, Math.PI * 2);
   ctx.fill();
-  
+
   // Add border
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;
   ctx.stroke();
-  
+
   ctx.fillStyle = "black";
   ctx.font = "14px Arial";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("↻", toggleButtonX, toggleButtonY);
-  
+
   // Draw menu toggle button (hamburger menu)
   const menuButtonX = canvas.width - 80;
   const menuButtonY = 30;
-  ctx.fillStyle = touchControls.showMobileMenu ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 255, 255, 0.8)";
+  ctx.fillStyle = touchControls.showMobileMenu
+    ? "rgba(100, 255, 100, 0.8)"
+    : "rgba(255, 255, 255, 0.8)";
   ctx.beginPath();
   ctx.roundRect(menuButtonX - 20, menuButtonY - 15, 40, 30, 5);
   ctx.fill();
-  
+
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;
   ctx.stroke();
-  
+
   // Draw hamburger lines
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;
@@ -2163,12 +2203,12 @@ function drawMobileControls() {
   ctx.moveTo(menuButtonX - 12, menuButtonY + 8);
   ctx.lineTo(menuButtonX + 12, menuButtonY + 8);
   ctx.stroke();
-  
+
   // Draw mobile menu if open
   if (touchControls.showMobileMenu) {
     drawMobileMenu();
   }
-  
+
   // Draw attack instruction for mobile
   if (!touchControls.showMobileMenu) {
     ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
@@ -2177,7 +2217,7 @@ function drawMobileControls() {
     ctx.textBaseline = "top";
     ctx.fillText("Tap anywhere to attack", canvas.width / 2, 10);
   }
-  
+
   ctx.restore();
 }
 
@@ -2186,75 +2226,100 @@ function drawMobileMenu() {
   const startX = canvas.width - 200;
   const startY = 80;
   const buttonSpacing = 40;
-  
+
   // Update button positions
   const buttons = touchControls.mobileButtons;
   let yOffset = 0;
-  
+
   Object.keys(buttons).forEach((key, index) => {
     buttons[key].x = startX;
-    buttons[key].y = startY + (index * buttonSpacing);
+    buttons[key].y = startY + index * buttonSpacing;
   });
-  
+
   // Draw menu background
   ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
   ctx.beginPath();
-  ctx.roundRect(startX - 10, startY - 10, 180, Object.keys(buttons).length * buttonSpacing + 10, 10);
+  ctx.roundRect(
+    startX - 10,
+    startY - 10,
+    180,
+    Object.keys(buttons).length * buttonSpacing + 10,
+    10
+  );
   ctx.fill();
-  
+
   // Draw menu buttons
   Object.entries(buttons).forEach(([key, button]) => {
     // Determine button state and color
     let isActive = false;
     let buttonColor = "rgba(255, 255, 255, 0.8)";
-    
-    switch(key) {
-      case 'debug':
+
+    switch (key) {
+      case "debug":
         isActive = debugPanelVisible;
-        buttonColor = isActive ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        buttonColor = isActive
+          ? "rgba(100, 255, 100, 0.8)"
+          : "rgba(255, 255, 255, 0.8)";
         break;
-      case 'autoAttack':
+      case "autoAttack":
         isActive = autoAttackEnabled;
-        buttonColor = isActive ? "rgba(100, 255, 100, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        buttonColor = isActive
+          ? "rgba(100, 255, 100, 0.8)"
+          : "rgba(255, 255, 255, 0.8)";
         break;
-      case 'chat':
+      case "chat":
         isActive = chatMode;
-        buttonColor = isActive ? "rgba(100, 255, 255, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        buttonColor = isActive
+          ? "rgba(100, 255, 255, 0.8)"
+          : "rgba(255, 255, 255, 0.8)";
         break;
-      case 'teleport':
+      case "teleport":
         // Only show teleport if debug is enabled
-        buttonColor = debugPanelVisible ? "rgba(255, 255, 255, 0.8)" : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
+        buttonColor = debugPanelVisible
+          ? "rgba(255, 255, 255, 0.8)"
+          : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
         break;
-      case 'collisionDebug':
+      case "collisionDebug":
         isActive = config.collision.debug;
         // Only show if debug panel is enabled
-        buttonColor = debugPanelVisible ? (isActive ? "rgba(255, 100, 100, 0.8)" : "rgba(255, 255, 255, 0.8)") : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
+        buttonColor = debugPanelVisible
+          ? isActive
+            ? "rgba(255, 100, 100, 0.8)"
+            : "rgba(255, 255, 255, 0.8)"
+          : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
         break;
-      case 'weaponDebug':
+      case "weaponDebug":
         isActive = config.collision.weaponDebug;
         // Only show if debug panel is enabled
-        buttonColor = debugPanelVisible ? (isActive ? "rgba(255, 150, 100, 0.8)" : "rgba(255, 255, 255, 0.8)") : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
+        buttonColor = debugPanelVisible
+          ? isActive
+            ? "rgba(255, 150, 100, 0.8)"
+            : "rgba(255, 255, 255, 0.8)"
+          : "rgba(128, 128, 128, 0.5)"; // Grayed out if debug is off
         break;
     }
-    
-    
+
     // Draw button background
     ctx.fillStyle = buttonColor;
     ctx.beginPath();
     ctx.roundRect(button.x, button.y, button.width, button.height, 5);
     ctx.fill();
-    
+
     // Draw button border
     ctx.strokeStyle = "black";
     ctx.lineWidth = 1;
     ctx.stroke();
-    
+
     // Draw button text
     ctx.fillStyle = "black";
     ctx.font = "12px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(button.label, button.x + button.width/2, button.y + button.height/2);
+    ctx.fillText(
+      button.label,
+      button.x + button.width / 2,
+      button.y + button.height / 2
+    );
   });
 }
 
@@ -2262,14 +2327,14 @@ function getTouchPos(e, touch) {
   const rect = canvas.getBoundingClientRect();
   return {
     x: touch.clientX - rect.left,
-    y: touch.clientY - rect.top
+    y: touch.clientY - rect.top,
   };
 }
 
 function isPointInCircle(x, y, centerX, centerY, radius) {
   const dx = x - centerX;
   const dy = y - centerY;
-  return (dx * dx + dy * dy) <= (radius * radius);
+  return dx * dx + dy * dy <= radius * radius;
 }
 
 // Helper function to check if point is within a rectangle
@@ -2280,7 +2345,7 @@ function isPointInRect(x, y, rectX, rectY, width, height) {
 // Helper function to get touched mobile button
 function getTouchedMobileButton(x, y) {
   if (!touchControls.showMobileMenu) return null;
-  
+
   const buttons = touchControls.mobileButtons;
   for (const [key, button] of Object.entries(buttons)) {
     if (isPointInRect(x, y, button.x, button.y, button.width, button.height)) {
@@ -2293,61 +2358,76 @@ function getTouchedMobileButton(x, y) {
 // Touch event handlers for mobile compatibility
 canvas.addEventListener("touchstart", (e) => {
   e.preventDefault();
-  
+
   for (let i = 0; i < e.touches.length; i++) {
     const touch = e.touches[i];
     const pos = getTouchPos(e, touch);
-    
+
     // Check joystick area - allow dragging from anywhere in the joystick area
     const joystickBaseX = 100;
     const joystickBaseY = canvas.height - 100;
-    if (isPointInCircle(pos.x, pos.y, joystickBaseX, joystickBaseY, touchControls.joystick.radius)) {
+    if (
+      isPointInCircle(
+        pos.x,
+        pos.y,
+        joystickBaseX,
+        joystickBaseY,
+        touchControls.joystick.radius
+      )
+    ) {
       touchControls.joystick.active = true;
       touchControls.joystick.startX = joystickBaseX;
       touchControls.joystick.startY = joystickBaseY;
       touchControls.joystick.touchId = touch.identifier; // Store the touch ID
-      
+
       // Start the joystick at the touch position (clamped to radius)
       const deltaX = pos.x - joystickBaseX;
       const deltaY = pos.y - joystickBaseY;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-      
+
       if (distance <= touchControls.joystick.radius) {
         touchControls.joystick.currentX = pos.x;
         touchControls.joystick.currentY = pos.y;
       } else {
         const angle = Math.atan2(deltaY, deltaX);
-        touchControls.joystick.currentX = joystickBaseX + Math.cos(angle) * touchControls.joystick.radius;
-        touchControls.joystick.currentY = joystickBaseY + Math.sin(angle) * touchControls.joystick.radius;
+        touchControls.joystick.currentX =
+          joystickBaseX + Math.cos(angle) * touchControls.joystick.radius;
+        touchControls.joystick.currentY =
+          joystickBaseY + Math.sin(angle) * touchControls.joystick.radius;
       }
       continue;
     }
-    
+
     // Check rotation mode toggle button
     const toggleButtonX = canvas.width - 30;
     const toggleButtonY = 30;
     if (isPointInCircle(pos.x, pos.y, toggleButtonX, toggleButtonY, 20)) {
       // Toggle between auto-face and tap-to-rotate modes
       touchControls.autoFaceMovement = !touchControls.autoFaceMovement;
-      console.log('Rotation mode toggled. Auto-face:', touchControls.autoFaceMovement);
+      console.log(
+        "Rotation mode toggled. Auto-face:",
+        touchControls.autoFaceMovement
+      );
       continue;
     }
-    
+
     // Check menu toggle button
     const menuButtonX = canvas.width - 80;
     const menuButtonY = 30;
-    if (isPointInRect(pos.x, pos.y, menuButtonX - 20, menuButtonY - 15, 40, 30)) {
+    if (
+      isPointInRect(pos.x, pos.y, menuButtonX - 20, menuButtonY - 15, 40, 30)
+    ) {
       touchControls.showMobileMenu = !touchControls.showMobileMenu;
       continue;
     }
-    
+
     // Check mobile menu buttons
     const buttonPressed = getTouchedMobileButton(pos.x, pos.y);
     if (buttonPressed) {
       handleMobileButtonPress(buttonPressed);
       continue;
     }
-    
+
     // Check if tapping on inventory slot
     const slotIndex = getInventorySlotFromPosition(pos.x, pos.y);
     if (slotIndex !== -1) {
@@ -2355,25 +2435,25 @@ canvas.addEventListener("touchstart", (e) => {
       const now = Date.now();
       const timeSinceLastTap = now - (lastInventoryClick?.time || 0);
       const tappedSameSlot = slotIndex === (lastInventoryClick?.slot || -1);
-      
-      if (tappedSameSlot && timeSinceLastTap < 500) { // 500ms double-tap window
+
+      if (tappedSameSlot && timeSinceLastTap < 500) {
+        // 500ms double-tap window
         // Double-tap: use the item
         const item = myPlayer?.inventory?.slots[slotIndex];
         if (item?.type === "consumable") {
-         
           useItem(slotIndex);
         }
       } else {
         // Single tap: select the slot
         handleInventorySelection(slotIndex);
       }
-     // Remember this tap for double-tap detection
-    lastInventoryClick = { slot: slotIndex, time: now };
-    continue; // Don't process as rotation
-  }
+      // Remember this tap for double-tap detection
+      lastInventoryClick = { slot: slotIndex, time: now };
+      continue; // Don't process as rotation
+    }
 
-  // Check mobile send button (if in chat mode)
-  if (chatMode && isMobileDevice && window.mobileSendButton) {
+    // Check mobile send button (if in chat mode)
+    if (chatMode && isMobileDevice && window.mobileSendButton) {
       const btn = window.mobileSendButton;
       if (isPointInRect(pos.x, pos.y, btn.x, btn.y, btn.width, btn.height)) {
         // Send message if there's text
@@ -2384,7 +2464,7 @@ canvas.addEventListener("touchstart", (e) => {
         continue;
       }
     }
-    
+
     // Check if tapping outside chat to exit chat mode
     if (chatMode) {
       // If we get here, the tap wasn't on the chat input box or send button
@@ -2394,55 +2474,66 @@ canvas.addEventListener("touchstart", (e) => {
       hideMobileKeyboard();
       continue; // Don't process as attack or rotation
     }
-    
+
     // Handle touch attack/rotation (tap anywhere else on screen)
     if (myPlayer && !chatMode) {
       // Check if tap is on mobile controls that should prevent attacks
       let skipAttack = false;
-      
+
       if (touchControls.showMobileMenu) {
         // Check if tap is within the mobile menu area (updated for wider menu)
         const menuStartY = canvas.height - 320; // Menu height increased for more buttons
-        const menuStartX = canvas.width - 220;  // Menu width increased for wider buttons
-        
+        const menuStartX = canvas.width - 220; // Menu width increased for wider buttons
+
         if (pos.y >= menuStartY && pos.x >= menuStartX) {
           skipAttack = true;
         }
       }
-      
+
       // Check if tap is on hamburger menu button
       const menuButtonX = canvas.width - 80;
       const menuButtonY = 30;
-      if (isPointInRect(pos.x, pos.y, menuButtonX - 20, menuButtonY - 15, 40, 30)) {
+      if (
+        isPointInRect(pos.x, pos.y, menuButtonX - 20, menuButtonY - 15, 40, 30)
+      ) {
         skipAttack = true;
       }
-      
+
       // Check if tap is on rotation toggle button
       const toggleButtonX = canvas.width - 80;
       const toggleButtonY = 90;
-      if (isPointInRect(pos.x, pos.y, toggleButtonX - 20, toggleButtonY - 15, 40, 30)) {
+      if (
+        isPointInRect(
+          pos.x,
+          pos.y,
+          toggleButtonX - 20,
+          toggleButtonY - 15,
+          40,
+          30
+        )
+      ) {
         skipAttack = true;
       }
-      
+
       if (!skipAttack) {
         // First, handle rotation if in tap-to-face mode
-      if (!touchControls.autoFaceMovement && touchControls.tapToRotate) {
-        const worldTouchX = pos.x + camera.x;
-        const worldTouchY = pos.y + camera.y;
-        const dx = worldTouchX - myPlayer.x;
-        const dy = worldTouchY - myPlayer.y;
-        const oldRotation = myPlayer.rotation;
-        myPlayer.rotation = Math.atan2(dy, dx) - Math.PI / 2;
-        
-        socket.emit("playerMovement", {
-          x: myPlayer.x,
-          y: myPlayer.y,
-          rotation: myPlayer.rotation,
-        });
-      }
-      
-      // Then handle attack - use unified attack handler
-      handleAttackAction();
+        if (!touchControls.autoFaceMovement && touchControls.tapToRotate) {
+          const worldTouchX = pos.x + camera.x;
+          const worldTouchY = pos.y + camera.y;
+          const dx = worldTouchX - myPlayer.x;
+          const dy = worldTouchY - myPlayer.y;
+          const oldRotation = myPlayer.rotation;
+          myPlayer.rotation = Math.atan2(dy, dx) - Math.PI / 2;
+
+          socket.emit("playerMovement", {
+            x: myPlayer.x,
+            y: myPlayer.y,
+            rotation: myPlayer.rotation,
+          });
+        }
+
+        // Then handle attack - use unified attack handler
+        handleAttackAction();
       } // Close the if (!skipAttack) block
     }
   }
@@ -2450,29 +2541,36 @@ canvas.addEventListener("touchstart", (e) => {
 
 canvas.addEventListener("touchmove", (e) => {
   e.preventDefault();
-  
+
   for (let i = 0; i < e.touches.length; i++) {
     const touch = e.touches[i];
     const pos = getTouchPos(e, touch);
-    
+
     // Update joystick - check if this touch belongs to the joystick
-    if (touchControls.joystick.active && touch.identifier === touchControls.joystick.touchId) {
+    if (
+      touchControls.joystick.active &&
+      touch.identifier === touchControls.joystick.touchId
+    ) {
       const deltaX = pos.x - touchControls.joystick.startX;
       const deltaY = pos.y - touchControls.joystick.startY;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-      
+
       // Constrain movement to joystick radius
       if (distance <= touchControls.joystick.radius) {
         touchControls.joystick.currentX = pos.x;
         touchControls.joystick.currentY = pos.y;
       } else {
         const angle = Math.atan2(deltaY, deltaX);
-        touchControls.joystick.currentX = touchControls.joystick.startX + Math.cos(angle) * touchControls.joystick.radius;
-        touchControls.joystick.currentY = touchControls.joystick.startY + Math.sin(angle) * touchControls.joystick.radius;
+        touchControls.joystick.currentX =
+          touchControls.joystick.startX +
+          Math.cos(angle) * touchControls.joystick.radius;
+        touchControls.joystick.currentY =
+          touchControls.joystick.startY +
+          Math.sin(angle) * touchControls.joystick.radius;
       }
       continue;
     }
-    
+
     // Note: Removed rotation from touchmove to prevent accidental rotation while dragging
     // Rotation now only happens on deliberate taps (touchstart) outside of controls
   }
@@ -2480,12 +2578,15 @@ canvas.addEventListener("touchmove", (e) => {
 
 canvas.addEventListener("touchend", (e) => {
   e.preventDefault();
-  
+
   for (let i = 0; i < e.changedTouches.length; i++) {
     const touch = e.changedTouches[i];
-    
+
     // Reset joystick
-    if (touchControls.joystick.active && touch.identifier === touchControls.joystick.touchId) {
+    if (
+      touchControls.joystick.active &&
+      touch.identifier === touchControls.joystick.touchId
+    ) {
       touchControls.joystick.active = false;
       // Return joystick to center
       touchControls.joystick.currentX = touchControls.joystick.startX;
@@ -2516,20 +2617,25 @@ function getInventorySlotFromPosition(x, y) {
   for (let i = 0; i < slots.length; i++) {
     const slotX = startX + i * (slotSize + padding);
     const slotY = startY;
-    
+
     // Check if point is within this slot
-    if (x >= slotX && x <= slotX + slotSize && 
-        y >= slotY && y <= slotY + slotSize) {
+    if (
+      x >= slotX &&
+      x <= slotX + slotSize &&
+      y >= slotY &&
+      y <= slotY + slotSize
+    ) {
       return i;
     }
   }
-  
+
   return -1; // No slot found
 }
 
 // Unified attack handler for both desktop and mobile
 function handleAttackAction() {
-  const activeItem = myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
+  const activeItem =
+    myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
   if (!activeItem) return;
 
   if (activeItem.type === "consumable") {
@@ -2553,8 +2659,8 @@ function handleAttackAction() {
 
 // Handle mobile button presses
 function handleMobileButtonPress(buttonKey) {
-  switch(buttonKey) {
-    case 'chat':
+  switch (buttonKey) {
+    case "chat":
       // Toggle chat mode (same as desktop Enter key)
       if (!chatMode) {
         chatMode = true;
@@ -2562,42 +2668,42 @@ function handleMobileButtonPress(buttonKey) {
         // Show mobile keyboard immediately in response to user touch
         if (isMobileDevice) {
           // Create and focus input immediately in the touch handler
-          const hiddenInput = document.createElement('input');
-          hiddenInput.type = 'text';
-          hiddenInput.style.position = 'fixed';
-          hiddenInput.style.left = '50%';
-          hiddenInput.style.top = '50%';
-          hiddenInput.style.transform = 'translate(-50%, -50%)';
-          hiddenInput.style.width = '10px';
-          hiddenInput.style.height = '10px';
-          hiddenInput.style.opacity = '0.01';
-          hiddenInput.style.border = 'none';
-          hiddenInput.style.outline = 'none';
-          hiddenInput.style.fontSize = '16px';
-          hiddenInput.style.zIndex = '9999';
-          hiddenInput.autocomplete = 'off';
-          hiddenInput.autocorrect = 'off';
-          hiddenInput.autocapitalize = 'off';
+          const hiddenInput = document.createElement("input");
+          hiddenInput.type = "text";
+          hiddenInput.style.position = "fixed";
+          hiddenInput.style.left = "50%";
+          hiddenInput.style.top = "50%";
+          hiddenInput.style.transform = "translate(-50%, -50%)";
+          hiddenInput.style.width = "10px";
+          hiddenInput.style.height = "10px";
+          hiddenInput.style.opacity = "0.01";
+          hiddenInput.style.border = "none";
+          hiddenInput.style.outline = "none";
+          hiddenInput.style.fontSize = "16px";
+          hiddenInput.style.zIndex = "9999";
+          hiddenInput.autocomplete = "off";
+          hiddenInput.autocorrect = "off";
+          hiddenInput.autocapitalize = "off";
           hiddenInput.spellcheck = false;
-          
+
           document.body.appendChild(hiddenInput);
           hiddenInput.focus();
-          
+
           // Adjust viewport for keyboard with delay
           setTimeout(() => {
             adjustViewportForKeyboard();
           }, 150);
-          
+
           // Add event listeners
-          hiddenInput.addEventListener('input', (e) => {
+          hiddenInput.addEventListener("input", (e) => {
             if (chatMode) {
               chatInput = e.target.value;
             }
           });
-          
-          hiddenInput.addEventListener('keydown', (e) => {
+
+          hiddenInput.addEventListener("keydown", (e) => {
             if (!chatMode) return;
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               e.preventDefault();
               sendChatMessage(chatInput);
               chatMode = false;
@@ -2605,17 +2711,21 @@ function handleMobileButtonPress(buttonKey) {
               hideMobileKeyboard();
             }
           });
-          
-          hiddenInput.addEventListener('blur', () => {
+
+          hiddenInput.addEventListener("blur", () => {
             if (chatMode) {
               setTimeout(() => {
-                if (hiddenInput && chatMode && document.body.contains(hiddenInput)) {
+                if (
+                  hiddenInput &&
+                  chatMode &&
+                  document.body.contains(hiddenInput)
+                ) {
                   hiddenInput.focus();
                 }
               }, 10);
             }
           });
-          
+
           window.mobileKeyboardInput = hiddenInput;
         }
       } else {
@@ -2626,18 +2736,18 @@ function handleMobileButtonPress(buttonKey) {
         hideMobileKeyboard();
       }
       break;
-      
-    case 'debug':
+
+    case "debug":
       // Toggle debug panel (equivalent to ';' key)
       debugPanelVisible = !debugPanelVisible;
       break;
-      
-    case 'autoAttack':
+
+    case "autoAttack":
       // Toggle auto attack (equivalent to 'e' key)
       toggleAutoAttack();
       break;
-      
-    case 'apple':
+
+    case "apple":
       // Quick select apple (equivalent to 'q' key)
       const appleSlot = myPlayer?.inventory?.slots.findIndex(
         (item) => item?.id === "apple"
@@ -2646,22 +2756,22 @@ function handleMobileButtonPress(buttonKey) {
         handleInventorySelection(appleSlot);
       }
       break;
-      
-    case 'teleport':
+
+    case "teleport":
       // Teleport (equivalent to 't' key) - only works when debug is enabled
       if (debugPanelVisible) {
         socket.emit("teleportRequest");
       }
       break;
-      
-    case 'collisionDebug':
+
+    case "collisionDebug":
       // Toggle collision debug (equivalent to 'p' key) - only works when debug panel is enabled
       if (debugPanelVisible) {
         config.collision.debug = !config.collision.debug;
       }
       break;
-      
-    case 'weaponDebug':
+
+    case "weaponDebug":
       // Toggle weapon debug (equivalent to 'o' key) - only works when debug panel is enabled
       if (debugPanelVisible) {
         config.collision.weaponDebug = !config.collision.weaponDebug;
@@ -2673,15 +2783,15 @@ function handleMobileButtonPress(buttonKey) {
 // Helper function to send chat message and avoid code duplication
 function sendChatMessage(messageText) {
   if (!messageText || messageText.trim().length === 0) return;
-  
+
   const message = messageText.trim().substring(0, config.chat.maxMessageLength);
-  
+
   // Show own message immediately
   playerMessages[socket.id] = {
     text: message,
     timestamp: Date.now(),
   };
-  
+
   // Send to server
   socket.emit("chatMessage", {
     message: message,
@@ -2696,43 +2806,43 @@ function showMobileKeyboard() {
     if (window.mobileKeyboardInput) {
       hideMobileKeyboard();
     }
-    
+
     // Create a simple input to trigger mobile keyboard
-    const hiddenInput = document.createElement('input');
-    hiddenInput.type = 'text';
-    hiddenInput.style.position = 'absolute';
-    hiddenInput.style.left = '-999px';
-    hiddenInput.style.top = '-999px';
-    hiddenInput.style.width = '1px';
-    hiddenInput.style.height = '1px';
-    hiddenInput.style.fontSize = '16px'; // Prevent zoom on iOS
-    hiddenInput.autocomplete = 'off';
-    hiddenInput.autocorrect = 'off';
-    hiddenInput.autocapitalize = 'off';
+    const hiddenInput = document.createElement("input");
+    hiddenInput.type = "text";
+    hiddenInput.style.position = "absolute";
+    hiddenInput.style.left = "-999px";
+    hiddenInput.style.top = "-999px";
+    hiddenInput.style.width = "1px";
+    hiddenInput.style.height = "1px";
+    hiddenInput.style.fontSize = "16px"; // Prevent zoom on iOS
+    hiddenInput.autocomplete = "off";
+    hiddenInput.autocorrect = "off";
+    hiddenInput.autocapitalize = "off";
     hiddenInput.spellcheck = false;
     hiddenInput.value = chatInput;
-    
+
     document.body.appendChild(hiddenInput);
     hiddenInput.focus();
-    
+
     // Adjust viewport for keyboard with a slight delay to ensure keyboard is triggering
     setTimeout(() => {
       adjustViewportForKeyboard();
     }, 150);
-    
+
     // Add event listeners
-    hiddenInput.addEventListener('input', (e) => {
+    hiddenInput.addEventListener("input", (e) => {
       if (chatMode) {
         chatInput = e.target.value;
       }
     });
-    
-    hiddenInput.addEventListener('blur', () => {
+
+    hiddenInput.addEventListener("blur", () => {
       if (chatMode && hiddenInput && document.body.contains(hiddenInput)) {
         setTimeout(() => hiddenInput.focus(), 0);
       }
     });
-    
+
     // Store reference
     window.mobileKeyboardInput = hiddenInput;
   }
@@ -2744,14 +2854,16 @@ function hideMobileKeyboard() {
     try {
       window.mobileKeyboardInput.blur();
       if (window.mobileKeyboardInput.parentNode) {
-        window.mobileKeyboardInput.parentNode.removeChild(window.mobileKeyboardInput);
+        window.mobileKeyboardInput.parentNode.removeChild(
+          window.mobileKeyboardInput
+        );
       }
     } catch (e) {
-      console.log('Error removing mobile keyboard input:', e);
+      console.log("Error removing mobile keyboard input:", e);
     }
     window.mobileKeyboardInput = null;
   }
-  
+
   // Reset viewport when keyboard is hidden
   resetViewportForKeyboard();
 }
@@ -2762,46 +2874,49 @@ function adjustViewportForKeyboard() {
     // Add viewport meta tag if it doesn't exist
     let viewport = document.querySelector('meta[name="viewport"]');
     if (!viewport) {
-      viewport = document.createElement('meta');
-      viewport.name = 'viewport';
+      viewport = document.createElement("meta");
+      viewport.name = "viewport";
       document.head.appendChild(viewport);
     }
-    
+
     // Set viewport to prevent zooming and allow proper keyboard handling
-    viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-    
+    viewport.content =
+      "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
+
     // Store original body styles if not already stored
     if (!window.originalBodyStyles) {
       window.originalBodyStyles = {
         height: document.body.style.height,
         paddingBottom: document.body.style.paddingBottom,
         overflow: document.body.style.overflow,
-        position: document.body.style.position
+        position: document.body.style.position,
       };
     }
-    
+
     // Prepare body for keyboard
-    document.body.style.height = '100vh';
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'relative';
-    
+    document.body.style.height = "100vh";
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "relative";
+
     // Function to handle viewport changes
     const handleKeyboardChange = () => {
       // Use a timeout to ensure the keyboard animation has started
       setTimeout(() => {
         if (window.visualViewport) {
-          const keyboardHeight = window.innerHeight - window.visualViewport.height;
-          if (keyboardHeight > 100) { // Keyboard is visible
+          const keyboardHeight =
+            window.innerHeight - window.visualViewport.height;
+          if (keyboardHeight > 100) {
+            // Keyboard is visible
             // Push the entire page content up
             document.body.style.transform = `translateY(-${keyboardHeight}px)`;
-            document.body.style.transition = 'transform 0.3s ease-out';
-            
+            document.body.style.transition = "transform 0.3s ease-out";
+
             // Also add padding to ensure chat input is visible
             document.body.style.paddingBottom = `${keyboardHeight}px`;
           } else {
             // Keyboard is hidden
-            document.body.style.transform = 'translateY(0px)';
-            document.body.style.paddingBottom = '0px';
+            document.body.style.transform = "translateY(0px)";
+            document.body.style.paddingBottom = "0px";
           }
         } else {
           // Fallback: detect keyboard by window height change
@@ -2809,28 +2924,29 @@ function adjustViewportForKeyboard() {
           if (!window.mobileOriginalHeight) {
             window.mobileOriginalHeight = currentHeight;
           }
-          
+
           const heightDiff = window.mobileOriginalHeight - currentHeight;
-          if (heightDiff > 150) { // Keyboard likely visible
+          if (heightDiff > 150) {
+            // Keyboard likely visible
             document.body.style.transform = `translateY(-${heightDiff}px)`;
-            document.body.style.transition = 'transform 0.3s ease-out';
+            document.body.style.transition = "transform 0.3s ease-out";
             document.body.style.paddingBottom = `${heightDiff}px`;
           } else {
-            document.body.style.transform = 'translateY(0px)';
-            document.body.style.paddingBottom = '0px';
+            document.body.style.transform = "translateY(0px)";
+            document.body.style.paddingBottom = "0px";
           }
         }
       }, 100);
     };
-    
+
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleKeyboardChange);
+      window.visualViewport.addEventListener("resize", handleKeyboardChange);
       window.mobileViewportHandler = handleKeyboardChange;
     } else {
-      window.addEventListener('resize', handleKeyboardChange);
+      window.addEventListener("resize", handleKeyboardChange);
       window.mobileResizeHandler = handleKeyboardChange;
     }
-    
+
     // Trigger initial check
     handleKeyboardChange();
   }
@@ -2841,29 +2957,244 @@ function resetViewportForKeyboard() {
     // Reset body styles to original
     if (window.originalBodyStyles) {
       document.body.style.height = window.originalBodyStyles.height;
-      document.body.style.paddingBottom = window.originalBodyStyles.paddingBottom;
+      document.body.style.paddingBottom =
+        window.originalBodyStyles.paddingBottom;
       document.body.style.overflow = window.originalBodyStyles.overflow;
       document.body.style.position = window.originalBodyStyles.position;
     }
-    
+
     // Reset transform
-    document.body.style.transform = 'translateY(0px)';
-    document.body.style.transition = 'transform 0.3s ease-out';
-    
+    document.body.style.transform = "translateY(0px)";
+    document.body.style.transition = "transform 0.3s ease-out";
+
     // Clean up event listeners
     if (window.visualViewport && window.mobileViewportHandler) {
-      window.visualViewport.removeEventListener('resize', window.mobileViewportHandler);
+      window.visualViewport.removeEventListener(
+        "resize",
+        window.mobileViewportHandler
+      );
       window.mobileViewportHandler = null;
     }
-    
+
     if (window.mobileResizeHandler) {
-      window.removeEventListener('resize', window.mobileResizeHandler);
+      window.removeEventListener("resize", window.mobileResizeHandler);
       window.mobileResizeHandler = null;
     }
-    
+
     // Reset after transition
     setTimeout(() => {
-      document.body.style.transition = '';
+      document.body.style.transition = "";
     }, 300);
+  }
+}
+
+// Add after other state variables near the top
+const floatingNumbers = [];
+
+// Add after the drawPlayer function
+function addFloatingNumber(x, y, value, type = "damage") {
+  floatingNumbers.push({
+    x,
+    y,
+    value: Math.round(value), // Round to whole numbers
+    type,
+    createdAt: performance.now(),
+    duration: 1000, // How long the number stays visible (ms)
+    velocity: { x: (Math.random() - 0.5) * 2, y: -3 }, // Random spread with upward motion
+  });
+}
+
+function drawFloatingNumbers() {
+  const now = performance.now();
+
+  // Update and draw each floating number
+  for (let i = floatingNumbers.length - 1; i >= 0; i--) {
+    const number = floatingNumbers[i];
+    const age = now - number.createdAt;
+
+    if (age >= number.duration) {
+      floatingNumbers.splice(i, 1);
+      continue;
+    }
+
+    // Calculate alpha based on age
+    const alpha = Math.max(0, 1 - age / number.duration);
+
+    // Update position
+    number.x += number.velocity.x;
+    number.y += number.velocity.y;
+
+    // Slow down vertical movement
+    number.velocity.y += 0.1;
+
+    // Draw the number
+    ctx.save();
+    ctx.fillStyle =
+      number.type === "heal"
+        ? `rgba(100, 255, 100, ${alpha})`
+        : `rgba(255, 100, 100, ${alpha})`;
+    ctx.font = "bold 20px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Draw text with outline
+    const screenX = number.x - camera.x;
+    const screenY = number.y - camera.y;
+
+    // Draw outline
+    ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
+    ctx.lineWidth = 3;
+    ctx.strokeText(
+      `${number.type === "heal" ? "+" : "-"}${number.value}`,
+      screenX,
+      screenY
+    );
+
+    // Draw text
+    ctx.fillText(
+      `${number.type === "heal" ? "+" : "-"}${number.value}`,
+      screenX,
+      screenY
+    );
+
+    ctx.restore();
+  }
+}
+
+// Modify the drawPlayers function to include floating numbers
+function drawPlayers(interpolation = 1) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw background and grid first
+  drawBackground();
+
+  // Define draw layers with fixed order (no Y-sorting)
+  const drawLayers = [
+    // Layer 1 - Walls (bottom)
+    ...walls
+      .filter((wall) => isInViewport(wall))
+      .map((wall) => ({ ...wall, type: "wall" })),
+
+    // Layer 2 - Players and Stones (middle)
+    ...Object.entries(players).map(([id, player]) => {
+      // Store the player with interpolated position if available
+      if (player.previousPosition && player !== myPlayer) {
+        // Interpolate between previous and current position
+        const interpolatedX =
+          player.previousPosition.x +
+          (player.x - player.previousPosition.x) * interpolation;
+        const interpolatedY =
+          player.previousPosition.y +
+          (player.y - player.previousPosition.y) * interpolation;
+
+        return {
+          ...player,
+          renderX: interpolatedX,
+          renderY: interpolatedY,
+          id: id,
+          type: "player",
+        };
+      }
+
+      return {
+        ...player,
+        renderX: player.x,
+        renderY: player.y,
+        id: id,
+        type: "player",
+      };
+    }),
+    ...stones
+      .filter((stone) => isInViewport(stone))
+      .map((stone) => ({ ...stone, type: "stone" })),
+
+    // Layer 3 - Trees (top)
+    ...trees
+      .filter((tree) => isInViewport(tree))
+      .map((tree) => ({ ...tree, type: "tree" })),
+  ];
+
+  // Draw everything in fixed layer order
+  drawLayers.forEach((obj) => {
+    switch (obj.type) {
+      case "wall":
+        drawWall(obj);
+        break;
+      case "player":
+        drawPlayer(obj);
+        break;
+      case "stone":
+        drawStone(obj);
+        break;
+      case "tree":
+        drawTree(obj);
+        break;
+    }
+  });
+
+  drawWorldBorder();
+  if (config.collision.debug) {
+    drawCollisionCircles();
+  }
+
+  // Draw UI elements last
+  drawHealthBars();
+  drawInventory();
+  drawChatInput();
+  drawFloatingNumbers(); // Add this line before debug panel
+  drawDebugPanel(); // Add this line
+
+  // Draw mobile controls for touch devices
+  if (isMobileDevice) {
+    drawMobileControls();
+  }
+}
+
+// Update socket handler for damage
+socket.on("playerHit", (data) => {
+  if (players[data.targetId]) {
+    // Create floating damage number
+    addFloatingNumber(
+      players[data.targetId].x,
+      players[data.targetId].y - 40,
+      data.damage
+    );
+  }
+});
+
+// Add healing number when healed
+socket.on("playerHealthUpdate", (data) => {
+  const player = players[data.playerId];
+  if (!player) return;
+
+  const oldHealth = player.health || 0;
+  const healthDiff = data.health - oldHealth;
+
+  // Update player health with validation
+  player.health = Math.max(0, Math.min(data.health, data.maxHealth));
+  player.lastHealthUpdate = data.timestamp;
+
+  // Only show healing numbers (when health increases)
+  if (healthDiff > 0) {
+    addFloatingNumber(player.x, player.y - 40, healthDiff, "heal");
+  }
+  // Apply velocity if provided
+  if (data.velocity) {
+    player.velocity = data.velocity;
+  }
+
+  // If this is our player, update local state
+  if (data.playerId === socket.id && myPlayer) {
+    myPlayer.health = player.health;
+    if (myPlayer.velocity) {
+      myPlayer.velocity = data.velocity;
+    }
+  }
+});
+// If this is our player, update local state
+if (data.playerId === socket.id && myPlayer) {
+  myPlayer.health = player.health;
+  if (myPlayer.velocity) {
+    myPlayer.velocity = data.velocity;
   }
 }
