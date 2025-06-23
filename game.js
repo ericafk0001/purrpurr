@@ -184,8 +184,14 @@ socket.on("playerMoved", (playerInfo) => {
       y: player.y,
     };
 
+    // Ensure received position is within bounds
+    const clampedX = clampWithEasing(playerInfo.x, 0, config.worldWidth);
+    const clampedY = clampWithEasing(playerInfo.y, 0, config.worldHeight);
+
     players[playerInfo.id] = {
       ...playerInfo,
+      x: clampedX,
+      y: clampedY,
       inventory: playerInfo.inventory || player.inventory,
       attacking: player.attacking, // Preserve local attack state
       attackProgress: player.attackProgress,
@@ -828,16 +834,21 @@ function updatePosition(deltaTime) {
   // Don't allow movement if dead
   if (myPlayer.isDead) return;
 
-  // Apply velocity with deltaTime for frame-rate independence
+  // Apply velocity with deltaTime for frame-rate independence and boundary checks
   if (myPlayer.velocity) {
-    myPlayer.x += myPlayer.velocity.x * deltaTime;
-    myPlayer.y += myPlayer.velocity.y * deltaTime;
+    const newX = myPlayer.x + myPlayer.velocity.x * deltaTime;
+    const newY = myPlayer.y + myPlayer.velocity.y * deltaTime;
+
+    // Clamp position within world bounds
+    myPlayer.x = clampWithEasing(newX, 0, config.worldWidth);
+    myPlayer.y = clampWithEasing(newY, 0, config.worldHeight);
 
     // Apply velocity decay
     const decayFactor = Math.pow(0.9, deltaTime * 60); // Scale decay to frame time
     myPlayer.velocity.x *= decayFactor;
     myPlayer.velocity.y *= decayFactor;
 
+    // Zero out small velocities
     if (Math.abs(myPlayer.velocity.x) < 0.1) myPlayer.velocity.x = 0;
     if (Math.abs(myPlayer.velocity.y) < 0.1) myPlayer.velocity.y = 0;
   }
@@ -3031,24 +3042,14 @@ function drawFloatingNumbers() {
     ctx.save();
     ctx.fillStyle =
       number.type === "heal"
-        ? `rgba(100, 255, 100, ${alpha})`
-        : `rgba(255, 100, 100, ${alpha})`;
-    ctx.font = "bold 20px Arial";
+        ? `rgba(100, 247, 42, ${alpha})`
+        : `rgba(255, 255, 255, ${alpha})`;
+    ctx.font = "38px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    // Draw text with outline
     const screenX = number.x - camera.x;
     const screenY = number.y - camera.y;
-
-    // Draw outline
-    ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
-    ctx.lineWidth = 3;
-    ctx.strokeText(
-      `${number.type === "heal" ? "+" : "-"}${number.value}`,
-      screenX,
-      screenY
-    );
 
     // Draw text
     ctx.fillText(
