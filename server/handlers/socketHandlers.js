@@ -1,0 +1,370 @@
+// Socket event handlers for multiplayer game functionality
+
+export function setupSocketHandlers(
+  io,
+  players,
+  trees,
+  stones,
+  walls,
+  gameConfig,
+  gameItems,
+  gameFunctions
+) {
+  // Import the necessary functions from gameFunctions
+  const {
+    broadcastInventoryUpdate,
+    healPlayer,
+    processAttack,
+    isValidWallPlacement,
+    findValidSpawnPosition,
+  } = gameFunctions;
+
+  io.on("connection", (socket) => {
+    const spawnPos = findValidSpawnPosition();
+    console.log("A player connected:", socket.id);
+
+    // Initialize player with health, inventory and velocity
+    players[socket.id] = {
+      x: spawnPos.x,
+      y: spawnPos.y,
+      rotation: 0,
+      health: gameConfig.player.health.max,
+      lastDamageTime: null,
+      lastAttackTime: null,
+      inventory: {
+        slots: Array(gameConfig.player.inventory.initialSlots).fill(null),
+        activeSlot: 0,
+      },
+      attacking: false,
+      velocity: { x: 0, y: 0 }, // Add velocity
+    };
+
+    // Give starting items
+    const startingItems = [
+      { ...gameItems.hammer, slot: 0 },
+      { ...gameItems.apple, slot: 1 },
+      { ...gameItems.wall, slot: 2 }, // Add wall to starting inventory
+    ];
+
+    startingItems.forEach((item) => {
+      players[socket.id].inventory.slots[item.slot] = item;
+    });
+
+    // Set initial active item
+    players[socket.id].inventory.selectedItem =
+      players[socket.id].inventory.slots[0];
+
+    // Send both players and trees data to new player
+    socket.emit("initGame", {
+      players: Object.entries(players).reduce((acc, [id, player]) => {
+        acc[id] = {
+          ...player,
+          health: player.health,
+          maxHealth: gameConfig.player.health.max,
+        };
+        return acc;
+      }, {}),
+      trees,
+      stones,
+      walls, // Add this line
+    });
+
+    // Notify other players about new player with health info
+    socket.broadcast.emit("newPlayer", {
+      id: socket.id,
+      x: spawnPos.x,
+      y: spawnPos.y,
+      health: gameConfig.player.health.max,
+      maxHealth: gameConfig.player.health.max,
+      inventory: players[socket.id].inventory,
+    });
+
+    socket.on("playerMovement", (movement) => {
+      const player = players[socket.id];
+      if (player && !player.isDead) {
+        // Apply velocity decay with weapon-specific knockback configuration
+        if (player.lastKnockbackTime) {
+          const elapsed = Date.now() - player.lastKnockbackTime;
+          if (elapsed < player.knockbackDuration) {
+            player.velocity.x *= player.knockbackDecay;
+            player.velocity.y *= player.knockbackDecay;
+          } else {
+            player.velocity.x = 0;
+            player.velocity.y = 0;
+            player.lastKnockbackTime = null;
+          }
+        }
+
+        // Apply velocity to position
+        player.x += player.velocity.x;
+        player.y += player.velocity.y;
+
+        // Then handle normal movement
+        const maxSpeed = gameConfig.moveSpeed * 1.5;
+        const dx = movement.x - player.x;
+        const dy = movement.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance <= maxSpeed) {
+          player.x = movement.x;
+          player.y = movement.y;
+          player.rotation = movement.rotation;
+
+          // Validate position is within world bounds
+          player.x = Math.max(0, Math.min(gameConfig.worldWidth, player.x));
+          player.y = Math.max(0, Math.min(gameConfig.worldHeight, player.y));
+
+          // Broadcast position update with health info and velocity
+          socket.broadcast.emit("playerMoved", {
+            id: socket.id,
+            x: player.x,
+            y: player.y,
+            rotation: player.rotation,
+            inventory: player.inventory,
+            attacking: player.attacking,
+            attackProgress: player.attackProgress,
+            attackStartTime: player.attackStartTime,
+            health: player.health,
+            maxHealth: gameConfig.player.health.max,
+            velocity: player.velocity,
+          });
+        } else {
+          // Position appears invalid - force sync correct position to client
+          socket.emit("positionCorrection", {
+            x: player.x,
+            y: player.y,
+            rotation: player.rotation,
+          });
+        }
+      }
+    });
+
+    socket.on("chatMessage", (data) => {
+      if (data.message && data.message.length > 0) {
+        // broadcast message to all players
+        io.emit("playerMessage", {
+          playerId: socket.id,
+          message: data.message,
+        });
+      }
+    });
+
+    // Handle heal request (consuming items, etc)
+    socket.on("healRequest", (amount) => {
+      if (amount && amount > 0) {
+        healPlayer(socket.id, amount);
+      }
+    });
+
+    // Handle inventory selection syncing
+    socket.on("inventorySelect", (data) => {
+      const player = players[socket.id];
+      if (player && typeof data.slot === "number") {
+        // Deselect currently selected item if any
+        player.inventory.slots.forEach((item) => {
+          if (item) item.selected = false;
+        });
+
+        // Select new item if slot has one
+        const selectedItem = player.inventory.slots[data.slot];
+        if (selectedItem) {
+          selectedItem.selected = true;
+          player.inventory.selectedItem = selectedItem;
+        } else {
+          player.inventory.selectedItem = null;
+        }
+
+        player.inventory.activeSlot = data.slot;
+
+        // Broadcast inventory update to all clients
+        broadcastInventoryUpdate(socket.id);
+      }
+    });
+
+    // Handle inventory expansion
+    socket.on("inventoryExpand", () => {
+      if (
+        players[socket.id] &&
+        players[socket.id].inventory.slots.length <
+          gameConfig.player.inventory.maxSlots
+      ) {
+        players[socket.id].inventory.slots.push(null);
+        io.emit("playerInventoryExpand", {
+          id: socket.id,
+          newSize: players[socket.id].inventory.slots.length,
+        });
+      }
+    });
+
+    // Update attack handler
+    socket.on("attackStart", () => {
+      const player = players[socket.id];
+      if (!player || player.isDead) return;
+
+      const now = Date.now();
+      if (
+        player.lastAttackTime &&
+        now - player.lastAttackTime < gameItems.hammer.cooldown
+      ) {
+        return;
+      }
+
+      player.attacking = true;
+      player.attackStartTime = now;
+      player.lastAttackTime = now;
+      player.attackProgress = 0;
+
+      // Broadcast attack start with timing info and rotation
+      io.emit("playerAttackStart", {
+        id: socket.id,
+        startTime: now,
+        rotation: player.rotation, // Include rotation for consistent animation direction
+      });
+
+      // Process attack immediately instead of waiting
+      processAttack(socket.id);
+
+      // End attack state after animation
+      setTimeout(() => {
+        if (player.attacking) {
+          player.attacking = false;
+          io.emit("playerAttackEnd", { id: socket.id });
+        }
+      }, gameItems.hammer.useTime);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Player disconnected:", socket.id);
+      delete players[socket.id];
+      io.emit("playerDisconnected", socket.id);
+    });
+
+    // Add new socket handler for item use
+    socket.on("useItem", (data) => {
+      const player = players[socket.id];
+      if (!player || player.isDead) return;
+
+      const item = player.inventory.slots[data.slot];
+      if (!item) return;
+
+      // Handle consumable items
+      if (item.type === "consumable") {
+        switch (item.id) {
+          case "apple":
+            const didHeal = healPlayer(socket.id, item.healAmount);
+
+            // Send appropriate response based on whether healing occurred
+            io.emit("itemUsed", {
+              id: socket.id,
+              slot: data.slot,
+              itemId: item.id,
+              success: didHeal,
+            });
+            break;
+        }
+      }
+    });
+
+    // Update the placeWall handler
+    socket.on("placeWall", (position) => {
+      const player = players[socket.id];
+      if (!player || player.isDead) return;
+
+      // Validate position is within world bounds
+      if (
+        position.x < 0 ||
+        position.x > gameConfig.worldWidth ||
+        position.y < 0 ||
+        position.y > gameConfig.worldHeight
+      )
+        return;
+
+      // Check if position is valid
+      if (!isValidWallPlacement(position.x, position.y)) return;
+
+      // Find wall in inventory
+      const wallSlot = player.inventory.slots.findIndex(
+        (item) => item?.id === "wall"
+      );
+      if (wallSlot === -1) return;
+
+      // Add wall to world with health
+      const wall = {
+        x: position.x,
+        y: position.y,
+        radius: gameConfig.collision.sizes.wall,
+        rotation: position.rotation || 0,
+        playerId: socket.id,
+        health: gameItems.wall.maxHealth, // Add initial health
+      };
+
+      walls.push(wall);
+
+      // Broadcast wall placement with health
+      io.emit("wallPlaced", wall);
+
+      // Switch back to hammer
+      player.inventory.activeSlot = 0;
+      player.inventory.selectedItem = player.inventory.slots[0];
+
+      // Broadcast inventory update
+      broadcastInventoryUpdate(socket.id);
+    });
+
+    // Add after other socket handlers in io.on("connection")
+    socket.on("teleportRequest", () => {
+      const player = players[socket.id];
+      if (!player || player.isDead) return;
+
+      let nearestPlayer = null;
+      let shortestDistance = Infinity;
+      const minSafeDistance = gameConfig.collision.sizes.player * 2.5; // Minimum safe distance
+
+      Object.entries(players).forEach(([id, target]) => {
+        if (id !== socket.id && !target.isDead) {
+          const dx = target.x - player.x;
+          const dy = target.y - player.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < shortestDistance) {
+            shortestDistance = distance;
+            nearestPlayer = target;
+          }
+        }
+      });
+
+      if (nearestPlayer) {
+        // Calculate safe position slightly offset from target player
+        const angle = Math.random() * Math.PI * 2; // Random angle
+        const teleportX = nearestPlayer.x + Math.cos(angle) * minSafeDistance;
+        const teleportY = nearestPlayer.y + Math.sin(angle) * minSafeDistance;
+
+        // Update player position
+        player.x = teleportX;
+        player.y = teleportY;
+
+        // Notify all clients about teleport
+        io.emit("playerTeleported", {
+          playerId: socket.id,
+          x: player.x,
+          y: player.y,
+        });
+      }
+    });
+
+    socket.on("attackAnimationUpdate", (data) => {
+      if (players[socket.id]) {
+        players[socket.id].attacking = data.attacking;
+        players[socket.id].attackProgress = data.progress;
+        players[socket.id].attackStartTime = data.startTime;
+        players[socket.id].rotation = data.rotation;
+
+        // Broadcast animation update to other players
+        socket.broadcast.emit("attackAnimationUpdate", {
+          id: socket.id,
+          ...data,
+        });
+      }
+    });
+  });
+}

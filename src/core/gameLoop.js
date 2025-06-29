@@ -1,0 +1,155 @@
+// Import required functions
+import { updatePosition, updateRotation } from "../player/player.js";
+import { updateCamera } from "./camera.js";
+import { drawPlayers } from "../rendering/renderer.js";
+import {
+  startAttack,
+  canAutoAttackWithCurrentItem,
+  isAttacking,
+  lastAttackTime,
+  attackDuration,
+  autoAttackEnabled,
+  attackAnimationProgress,
+  setIsAttacking,
+  setAttackAnimationProgress,
+} from "../player/attack.js";
+import { items, players, myPlayer } from "../utils/constants.js";
+
+// Timing and FPS variables
+export let lastFrameTime = performance.now();
+export let frameCount = 0;
+export let currentFps = 0;
+export let lastFpsUpdate = 0;
+export const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
+export const FIXED_TIMESTEP = 1000 / 60; // 16.67ms for 60 FPS physics
+export let accumulatedTime = 0;
+export let lastUpdateTime = performance.now();
+
+// Game loop function with fixed timestep physics and variable rendering
+export function gameLoop(timestamp) {
+  const frameTime = performance.now();
+  const frameDelta = frameTime - lastFrameTime;
+  lastFrameTime = frameTime;
+  frameCount++;
+
+  // Update FPS counter at intervals
+  if (frameTime - lastFpsUpdate > FPS_UPDATE_INTERVAL) {
+    currentFps = Math.round((frameCount * 1000) / (frameTime - lastFpsUpdate));
+    frameCount = 0;
+    lastFpsUpdate = frameTime;
+  }
+
+  // Calculate time since last game update
+  const currentTime = performance.now();
+  let deltaTime = currentTime - lastUpdateTime;
+
+  // Cap deltaTime to avoid spiral of death
+  if (deltaTime > 200) {
+    deltaTime = 200;
+  }
+
+  // Accumulate time for fixed timestep updates
+  accumulatedTime += deltaTime;
+  lastUpdateTime = currentTime;
+
+  // Process game logic in fixed timestep increments
+  while (accumulatedTime >= FIXED_TIMESTEP) {
+    // Update game physics at fixed intervals
+    updateGameLogic(FIXED_TIMESTEP / 1000); // Convert ms to seconds for calculations
+    accumulatedTime -= FIXED_TIMESTEP;
+  }
+
+  // Calculate interpolation fraction for rendering
+  const interpolation = accumulatedTime / FIXED_TIMESTEP;
+
+  // Update attack animation
+  if (isAttacking && myPlayer) {
+    const attackTime = Date.now();
+    const attackElapsed = attackTime - lastAttackTime;
+
+    if (attackElapsed <= attackDuration) {
+      // Update animation progress
+      const newProgress = Math.min(1, attackElapsed / attackDuration);
+      setAttackAnimationProgress(newProgress);
+      myPlayer.attackProgress = attackAnimationProgress;
+      myPlayer.attackStartTime = lastAttackTime;
+    } else {
+      // End attack animation
+      setIsAttacking(false);
+      myPlayer.attacking = false;
+      myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = null;
+      myPlayer.attackStartRotation = null;
+
+      // Queue next attack only if auto-attack is enabled and we have valid weapon
+      if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
+        const cooldownRemaining =
+          (items.hammer.cooldown || 800) - attackDuration;
+        setTimeout(startAttack, Math.max(0, cooldownRemaining));
+      }
+    }
+  }
+
+  // Render at interpolated state
+  const cameraDeltaTime = frameDelta / 1000; // Convert ms to seconds
+  updateCamera(cameraDeltaTime);
+  drawPlayers(interpolation);
+  requestAnimationFrame(gameLoop);
+}
+
+// New function for fixed timestep updates
+export function updateGameLogic(deltaTime) {
+  if (!myPlayer) return;
+
+  // Update attack animation for local player
+  if (isAttacking && myPlayer) {
+    const attackTime = Date.now();
+    const attackElapsed = attackTime - lastAttackTime;
+
+    if (attackElapsed <= attackDuration) {
+      // Update animation progress
+      const newProgress = Math.min(1, attackElapsed / attackDuration);
+      setAttackAnimationProgress(newProgress);
+      myPlayer.attackProgress = newProgress;
+      myPlayer.attackStartTime = lastAttackTime;
+    } else {
+      // End attack animation
+      setIsAttacking(false);
+      myPlayer.attacking = false;
+      myPlayer.attackProgress = 0;
+      myPlayer.attackStartTime = null;
+      myPlayer.attackStartRotation = null;
+
+      // Queue next attack only if auto-attack is enabled and we have valid weapon
+      if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
+        const cooldownRemaining =
+          (items.hammer.cooldown || 800) - attackDuration;
+        setTimeout(startAttack, Math.max(0, cooldownRemaining));
+      }
+    }
+  }
+
+  // Update all players' attack animations
+  const animTime = Date.now();
+  Object.values(players).forEach((player) => {
+    if (!player.attacking || !player.attackStartTime) return;
+
+    const elapsed = animTime - player.attackStartTime;
+    const attackDuration = items.hammer.useTime || 400;
+
+    // Update animation progress
+    if (elapsed <= attackDuration) {
+      player.attackProgress = Math.min(1, elapsed / attackDuration);
+    } else {
+      // End animation
+      player.attacking = false;
+      player.attackProgress = 0;
+      player.attackStartTime = null;
+      player.attackStartRotation = null;
+    }
+  });
+
+  // Update player position and rotation with fixed timestep
+  updatePosition(deltaTime);
+  updateRotation();
+}
