@@ -20,7 +20,11 @@ import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
 import { updateCamera } from "../core/camera.js";
 
-// Network utility functions
+/**
+ * Sends the local player's current position and rotation to the server.
+ * 
+ * Emits a "playerMovement" event with the player's coordinates and rotation for synchronization in the multiplayer game.
+ */
 export function sendPlayerMovement() {
   if (!myPlayer) return;
 

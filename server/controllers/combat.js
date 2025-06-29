@@ -1,4 +1,8 @@
-// Combat and attack system functions
+/**
+ * Processes a melee attack for a player, applying damage to walls and other players within a defined arc and range.
+ *
+ * Only executes if the attacker is valid and equipped with a "hammer" weapon. Walls and players within the attack arc and range receive damage; destroyed walls and hit players trigger corresponding events via the socket.
+ */
 
 export function processAttack(
   attackerId,
@@ -118,6 +122,11 @@ export function processAttack(
   });
 }
 
+/**
+ * Normalizes an angle to the range [-π, π].
+ * @param {number} angle - The angle in radians to normalize.
+ * @return {number} The normalized angle within [-π, π].
+ */
 export function normalizeAngle(angle) {
   while (angle > Math.PI) angle -= 2 * Math.PI;
   while (angle < -Math.PI) angle += 2 * Math.PI;

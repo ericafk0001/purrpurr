@@ -1,4 +1,8 @@
-// Socket event handlers for multiplayer game functionality
+/**
+ * Registers socket.io event handlers to manage multiplayer game interactions, player lifecycle, and world state synchronization.
+ *
+ * Sets up handlers for player connection, movement, chat, healing, inventory management, attacking, item usage, wall placement, teleportation, and disconnection. Ensures consistent game state across all clients and enforces game rules such as cooldowns, valid actions, and world boundaries.
+ */
 
 export function setupSocketHandlers(
   io,

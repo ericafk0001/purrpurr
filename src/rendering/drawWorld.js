@@ -11,7 +11,11 @@ import {
 // World rendering variables
 export const wallShakes = new Map(); // Track wall shake animations
 
-// World drawing functions
+/**
+ * Draws a tree at its world position on the canvas, applying rotation and scaling based on configuration.
+ * 
+ * The tree is rendered only if the tree asset is loaded. The position is adjusted relative to the camera, and the tree is drawn with the configured radius.
+ */
 export function drawTree(tree) {
   if (assets.tree && assets.loadStatus.tree) {
     ctx.save();
@@ -27,6 +31,11 @@ export function drawTree(tree) {
     ctx.restore();
   }
 }
+/**
+ * Draws a stone at its world position on the canvas, applying rotation and scaling based on configuration.
+ * 
+ * The stone is rendered only if the stone asset is loaded. The position is adjusted relative to the camera, and the stone is drawn with the configured radius.
+ */
 export function drawStone(stone) {
   if (assets.stone && assets.loadStatus.stone) {
     ctx.save();
@@ -43,7 +52,12 @@ export function drawStone(stone) {
   }
 }
 
-// Add new function to draw walls
+/**
+ * Draws a wall at its world position with optional rotation, shake animation, and damage transparency effects.
+ * 
+ * The wall is rendered using the wall asset, scaled according to configuration. If a shake animation is active for the wall, a decaying random offset is applied. The wall's transparency reflects its current health, becoming more transparent as it takes damage.
+ * @param {Object} wall - The wall object containing position, rotation, and health properties.
+ */
 export function drawWall(wall) {
   if (assets.wall) {
     ctx.save();
@@ -88,13 +102,22 @@ export function drawWall(wall) {
   }
 }
 
+/**
+ * Draws the border of the world as a rectangle on the canvas, positioned relative to the camera.
+ */
 export function drawWorldBorder() {
   ctx.strokeStyle = config.colors.worldBorder;
   ctx.lineWidth = 4;
   ctx.strokeRect(-camera.x, -camera.y, config.worldWidth, config.worldHeight);
 }
 
-// Update isInViewport to handle non-circular objects
+/**
+ * Determines whether an object is within the visible area of the canvas viewport.
+ * 
+ * Uses the object's `radius` property if available, or a default size, to calculate its bounding box for visibility checks.
+ * @param {Object} object - The world object with `x`, `y`, and optional `radius` properties.
+ * @return {boolean} True if any part of the object is visible within the current camera viewport; otherwise, false.
+ */
 export function isInViewport(object) {
   const radius = object.radius || Math.max(30, config.collision.sizes.player);
   return (

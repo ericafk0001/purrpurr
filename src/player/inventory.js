@@ -11,12 +11,20 @@ import { chatMode } from "../ui/chat.js";
 // Track inventory clicks for double-click detection
 export let lastInventoryClick = { slot: -1, time: 0 };
 
-// Setter function for lastInventoryClick
+/**
+ * Updates the record of the last inventory slot click with the provided data.
+ * @param {{ slot: number, time: number }} clickData - The slot index and timestamp of the last inventory click.
+ */
 export function setLastInventoryClick(clickData) {
   lastInventoryClick = clickData;
 }
 
-// Inventory functions
+/**
+ * Selects the specified inventory slot, updates the player's active slot and selected item, and notifies the server.
+ *
+ * If auto-attack is enabled and the selected item is a "hammer," resets the attack state and initiates a new attack sequence.
+ * Does nothing if the slot index is invalid or the player inventory is uninitialized.
+ */
 export function handleInventorySelection(index) {
   if (!myPlayer?.inventory) return;
 
@@ -40,7 +48,11 @@ export function handleInventorySelection(index) {
   // Notify server of slot change
   socket.emit("inventorySelect", { slot: index });
 }
-// Add useItem function
+/**
+ * Uses a consumable item from the specified inventory slot if available.
+ * Emits a "useItem" event to the server for the given slot.
+ * @param {number} slot - The index of the inventory slot to use.
+ */
 export function useItem(slot) {
   if (!myPlayer?.inventory?.slots[slot]) return;
 
@@ -50,7 +62,15 @@ export function useItem(slot) {
     // Let server event handler switch back to hammer
   }
 }
-// Helper function to get inventory slot from screen coordinates
+/**
+ * Returns the inventory slot index at the given screen coordinates, or -1 if no slot is found.
+ *
+ * Calculates the position of each inventory slot based on UI configuration and canvas size, then checks if the provided (x, y) coordinates fall within any slot's boundaries.
+ *
+ * @param {number} x - The x-coordinate relative to the canvas.
+ * @param {number} y - The y-coordinate relative to the canvas.
+ * @return {number} The index of the inventory slot at the given position, or -1 if none.
+ */
 export function getInventorySlotFromPosition(x, y) {
   if (!config.player.inventory.enabled || !myPlayer?.inventory) return -1;
 
@@ -79,7 +99,10 @@ export function getInventorySlotFromPosition(x, y) {
 
   return -1; // No slot found
 }
-// Function to expand inventory (for future use)
+/**
+ * Increases the player's inventory slot count by one if below the maximum allowed.
+ * @return {boolean} True if the inventory was expanded; false if already at maximum slots.
+ */
 export function expandInventory() {
   const inv = config.player.inventory;
   if (inv.currentSlots < inv.maxSlots) {
@@ -98,7 +121,13 @@ export function expandInventory() {
   return false;
 }
 
-// Inventory input handling functions
+/**
+ * Handles keyboard input for inventory slot selection and quick item access.
+ *
+ * Number keys 1-5 select the corresponding inventory slot. Pressing "Q" selects the first slot containing an apple, if available.
+ * @param {KeyboardEvent} e - The keyboard event to process.
+ * @return {boolean} True if the event was handled for inventory actions; otherwise, false.
+ */
 export function handleInventoryKeydown(e) {
   // Number keys for inventory selection (1-5)
   const keyNum = parseInt(e.key);
@@ -122,7 +151,14 @@ export function handleInventoryKeydown(e) {
   return false; // Event not handled
 }
 
-// Mouse click handling for inventory
+/**
+ * Handles mouse clicks on the inventory UI, supporting slot selection and double-click item usage.
+ *
+ * If the user clicks on an inventory slot, a single click selects the slot, while a double-click within 500ms on the same slot uses the item if it is consumable. Returns `true` if the click was on an inventory slot and handled; otherwise, returns `false`.
+ *
+ * @param {MouseEvent} e - The mouse event triggered by the user's click.
+ * @return {boolean} Whether the inventory click was handled.
+ */
 export function handleInventoryMouseClick(e) {
   if (!chatMode) {
     // Get mouse position relative to canvas

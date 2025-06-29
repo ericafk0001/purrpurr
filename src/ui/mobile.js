@@ -29,7 +29,12 @@ import {
 import { debugPanelVisible, toggleDebugPanel } from "./debug.js";
 import { sendPlayerMovement } from "../network/socketHandlers.js";
 
-// Mobile-specific helper functions
+/**
+ * Calculates the position of a touch event relative to the canvas.
+ * @param {TouchEvent} e - The touch event.
+ * @param {Touch} touch - The specific touch point to evaluate.
+ * @return {{x: number, y: number}} The x and y coordinates relative to the top-left corner of the canvas.
+ */
 export function getTouchPos(e, touch) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -38,18 +43,41 @@ export function getTouchPos(e, touch) {
   };
 }
 
+/**
+ * Determines whether a point lies within or on the boundary of a given circle.
+ * @param {number} x - The x-coordinate of the point to test.
+ * @param {number} y - The y-coordinate of the point to test.
+ * @param {number} centerX - The x-coordinate of the circle's center.
+ * @param {number} centerY - The y-coordinate of the circle's center.
+ * @param {number} radius - The radius of the circle.
+ * @return {boolean} True if the point is inside or on the circle; otherwise, false.
+ */
 export function isPointInCircle(x, y, centerX, centerY, radius) {
   const dx = x - centerX;
   const dy = y - centerY;
   return dx * dx + dy * dy <= radius * radius;
 }
 
-// Helper function to check if point is within a rectangle
+/**
+ * Determines whether a point lies within a specified rectangle.
+ * @param {number} x - The x-coordinate of the point to check.
+ * @param {number} y - The y-coordinate of the point to check.
+ * @param {number} rectX - The x-coordinate of the rectangle's top-left corner.
+ * @param {number} rectY - The y-coordinate of the rectangle's top-left corner.
+ * @param {number} width - The width of the rectangle.
+ * @param {number} height - The height of the rectangle.
+ * @return {boolean} True if the point is inside the rectangle, false otherwise.
+ */
 export function isPointInRect(x, y, rectX, rectY, width, height) {
   return x >= rectX && x <= rectX + width && y >= rectY && y <= rectY + height;
 }
 
-// Helper function to get touched mobile button
+/**
+ * Returns the key of the mobile menu button at the specified coordinates, or null if none is pressed or the menu is hidden.
+ * @param {number} x - The x-coordinate of the touch point.
+ * @param {number} y - The y-coordinate of the touch point.
+ * @return {string|null} The key of the touched button, or null if no button is pressed.
+ */
 export function getTouchedMobileButton(x, y) {
   if (!touchControls.showMobileMenu) return null;
 
@@ -103,7 +131,9 @@ export let touchControls = {
 
 export let virtualKeys = { w: false, a: false, s: false, d: false };
 
-// Mobile UI functions
+/**
+ * Renders the mobile control UI elements on the game canvas, including the virtual joystick, rotation mode toggle, menu button, and context-specific instructions or menus.
+ */
 export function drawMobileControls() {
   if (!isMobileDevice) return;
 
@@ -258,6 +288,11 @@ export function drawMobileControls() {
   ctx.restore();
 }
 
+/**
+ * Renders the mobile menu UI, displaying interactive buttons for chat, debug, auto-attack, inventory, teleport, and debug toggles.
+ *
+ * Button positions and colors reflect their current state and availability, with disabled buttons grayed out when not accessible (e.g., debug-only features). The menu background and all buttons are drawn on the game canvas.
+ */
 function drawMobileMenu() {
   // Calculate button positions
   const startX = canvas.width - 200;
@@ -359,7 +394,12 @@ function drawMobileMenu() {
     );
   });
 }
-// Handle mobile button presses
+/**
+ * Handles actions for mobile menu button presses based on the provided button key.
+ *
+ * Depending on the button pressed, this function toggles chat mode and manages the mobile keyboard, toggles debug and auto-attack modes, selects the apple inventory slot, sends a teleport request, or toggles collision and weapon debug flags. Some actions are only available when the debug panel is visible.
+ * @param {string} buttonKey - The key identifying the mobile button pressed.
+ */
 function handleMobileButtonPress(buttonKey) {
   switch (buttonKey) {
     case "chat":
@@ -482,7 +522,11 @@ function handleMobileButtonPress(buttonKey) {
   }
 }
 
-// Show mobile keyboard for chat input
+/**
+ * Displays the native mobile keyboard for chat input by creating and focusing a hidden input element.
+ *
+ * For mobile devices, this function appends a hidden text input to the DOM, focuses it to trigger the keyboard, synchronizes its value with the chat input state, and ensures the keyboard remains open while in chat mode. Adjusts the viewport to accommodate the keyboard as needed.
+ */
 export function showMobileKeyboard() {
   // For mobile devices, we'll add an on-screen keyboard or focus tricks
   if (isMobileDevice) {
@@ -532,7 +576,9 @@ export function showMobileKeyboard() {
   }
 }
 
-// Clean up mobile keyboard
+/**
+ * Hides and removes the mobile keyboard input element and restores the original viewport and body styles.
+ */
 export function hideMobileKeyboard() {
   if (window.mobileKeyboardInput) {
     try {
@@ -552,7 +598,11 @@ export function hideMobileKeyboard() {
   resetViewportForKeyboard();
 }
 
-// Viewport management for mobile keyboard
+/**
+ * Adjusts the viewport and body styles to accommodate the mobile keyboard, ensuring UI elements remain visible when the keyboard appears.
+ *
+ * On mobile devices, this function sets appropriate viewport meta tag properties, modifies body styles to prevent scrolling and zooming, and shifts the page content upward when the keyboard is shown. It also adds event listeners to detect keyboard visibility changes and updates the layout accordingly.
+ */
 function adjustViewportForKeyboard() {
   if (isMobileDevice) {
     // Add viewport meta tag if it doesn't exist
@@ -636,6 +686,11 @@ function adjustViewportForKeyboard() {
   }
 }
 
+/**
+ * Restores the original viewport and body styles after the mobile keyboard is hidden.
+ *
+ * Resets any transformations, transitions, and event listeners added for keyboard handling on mobile devices.
+ */
 function resetViewportForKeyboard() {
   if (isMobileDevice) {
     // Reset body styles to original
@@ -671,7 +726,12 @@ function resetViewportForKeyboard() {
     }, 300);
   }
 }
-// Touch event handlers for mobile compatibility
+/**
+ * Handles touch start events for mobile devices, enabling joystick control, UI button interaction, inventory selection and usage, chat input, player rotation, and attack actions.
+ * 
+ * Processes each touch to determine if it interacts with the joystick, rotation toggle, menu toggle, mobile menu buttons, inventory slots (including double-tap to use consumables), chat send button, or triggers player actions such as rotation and attack. Exits chat mode if tapping outside chat controls. Prevents default browser behavior to ensure smooth game input handling.
+ * @param {TouchEvent} e - The touch start event.
+ */
 export function handleTouchStart(e) {
   e.preventDefault();
 
@@ -854,6 +914,12 @@ export function handleTouchStart(e) {
   }
 }
 
+/**
+ * Handles touch move events to update the virtual joystick position on mobile devices.
+ *
+ * If a touch corresponds to the active joystick, updates the joystick knob position, constraining it within the joystick's radius. Does not handle player rotation or other actions during touch move.
+ * @param {TouchEvent} e - The touch move event.
+ */
 export function handleTouchMove(e) {
   e.preventDefault();
 
@@ -891,6 +957,11 @@ export function handleTouchMove(e) {
   }
 }
 
+/**
+ * Handles touch end events to reset the virtual joystick state when the controlling touch is released.
+ * 
+ * Deactivates the joystick, returns the knob to its center position, and clears the associated touch identifier.
+ */
 export function handleTouchEnd(e) {
   e.preventDefault();
 

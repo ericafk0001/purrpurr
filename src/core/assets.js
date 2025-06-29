@@ -2,7 +2,11 @@
 import { config, items, assets } from "../utils/constants.js";
 
 // Asset loading functions
-// Modify loadAssets function to include apple
+/**
+ * Loads image assets defined in the configuration and item definitions into the application.
+ *
+ * Initiates asynchronous loading of all assets specified in `config.assets` and item-specific assets (hammer, apple, wall). Updates the global `assets` object and load status for each asset upon completion or failure.
+ */
 export function loadAssets() {
   Object.keys(config.assets).forEach((key) => {
     const img = new Image();

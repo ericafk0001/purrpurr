@@ -1,4 +1,8 @@
-// World generation functions for trees and stones
+/**
+ * Populates the provided array with procedurally generated tree objects positioned within the game world.
+ *
+ * Trees are placed using a spatial grid to enforce minimum distance constraints and limit the number of trees per cell and its neighbors, ensuring realistic spacing and density. Each tree is assigned a random position, fixed radius, and random rotation.
+ */
 
 export function generateTrees(trees, gameConfig) {
   const cellSize = gameConfig.trees.minDistance;
@@ -10,6 +14,15 @@ export function generateTrees(trees, gameConfig) {
     .fill()
     .map(() => Array(gridHeight + 1).fill(0));
 
+  /**
+   * Determines if a given (x, y) position is valid for placing a tree based on grid boundaries and local density constraints.
+   * 
+   * The position is considered valid if it falls within the grid and the total number of trees in the surrounding 3x3 grid cells is less than the maximum allowed per cell as specified in the configuration.
+   * 
+   * @param {number} x - The x-coordinate of the candidate position.
+   * @param {number} y - The y-coordinate of the candidate position.
+   * @return {boolean} True if the position is valid for tree placement; otherwise, false.
+   */
   function isValidPosition(x, y) {
     const cellX = Math.floor(x / cellSize);
     const cellY = Math.floor(y / cellSize);
@@ -61,6 +74,14 @@ export function generateTrees(trees, gameConfig) {
   }
 }
 
+/**
+ * Populates the provided array with stone objects distributed throughout the game world according to configuration constraints.
+ *
+ * Stones are placed at random positions, ensuring a minimum distance between them and limiting the number of stones per grid cell and its neighbors. The total number of stones is determined by the world area and the configured stone density.
+ *
+ * @param {Array} stones - The array to be filled with generated stone objects.
+ * @param {Object} gameConfig - Configuration object specifying world dimensions and stone placement parameters.
+ */
 export function generateStones(stones, gameConfig) {
   const cellSize = gameConfig.stones.minDistance;
   const gridWidth = Math.floor(gameConfig.worldWidth / cellSize) + 1;

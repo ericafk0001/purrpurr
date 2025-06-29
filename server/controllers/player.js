@@ -1,7 +1,11 @@
 // Player management, health, and inventory functions
 import { findSafeSpawnPoint } from "../utils/collision.js";
 
-// Helper function to broadcast player health updates
+/**
+ * Broadcasts the specified player's current health and related state to all connected clients.
+ *
+ * Emits a "playerHealthUpdate" event containing the player's health, maximum health, timestamp, and velocity. No action is taken if the player does not exist.
+ */
 export function broadcastHealthUpdate(playerId, players, io, gameConfig) {
   const player = players[playerId];
   if (!player) return;
@@ -15,7 +19,12 @@ export function broadcastHealthUpdate(playerId, players, io, gameConfig) {
   });
 }
 
-// Helper function to broadcast inventory updates
+/**
+ * Broadcasts the specified player's inventory to all connected clients.
+ * 
+ * Emits a "playerInventoryUpdate" event containing the player's ID and current inventory.
+ * Does nothing if the player does not exist.
+ */
 export function broadcastInventoryUpdate(playerId, players, io) {
   const player = players[playerId];
   if (!player) return;
@@ -26,7 +35,16 @@ export function broadcastInventoryUpdate(playerId, players, io) {
   });
 }
 
-// Health system utility functions
+/**
+ * Applies damage to a player, updates their health, and applies knockback if attacked by another player.
+ *
+ * Reduces the specified player's health by the given amount, applies knockback based on the attacker's weapon if present, and broadcasts the updated health to all clients. If the player's health drops to zero from a positive value, triggers the death and respawn process.
+ *
+ * @param {string} playerId - The ID of the player receiving damage.
+ * @param {number} amount - The amount of damage to apply.
+ * @param {object} attacker - The attacking player object, or null if not applicable.
+ * @return {boolean} Returns true if damage was applied; false if the player does not exist.
+ */
 export function damagePlayer(
   playerId,
   amount,
@@ -77,6 +95,12 @@ export function damagePlayer(
   return true;
 }
 
+/**
+ * Heals a player by a specified amount, up to the maximum health defined in the game configuration.
+ * @param {string} playerId - The ID of the player to heal.
+ * @param {number} amount - The amount of health to restore.
+ * @returns {boolean} True if healing was applied; false if the player does not exist or is already at full health.
+ */
 export function healPlayer(playerId, amount, players, io, gameConfig) {
   const player = players[playerId];
   if (!player) return false;
@@ -97,7 +121,11 @@ export function healPlayer(playerId, amount, players, io, gameConfig) {
   return player.health > oldHealth; // Return true if any healing was applied
 }
 
-// Enhanced player death handling
+/**
+ * Handles player death by marking the player as dead, emitting a death event, and scheduling a respawn after a delay.
+ *
+ * Marks the player as dead, sets health to zero, and emits a "playerDied" event to all clients. After a 3-second delay, respawns the player at a safe location with full health and emits a "playerRespawned" event containing the updated player state.
+ */
 export function handlePlayerDeath(
   playerId,
   players,

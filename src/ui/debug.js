@@ -18,16 +18,26 @@ import { autoAttackEnabled } from "../player/attack.js";
 // Debug variables
 export let debugPanelVisible = false;
 
-// Setter function for debugPanelVisible
+/**
+ * Sets the visibility state of the debug panel.
+ * @param {boolean} value - Whether the debug panel should be visible.
+ */
 export function setDebugPanelVisible(value) {
   debugPanelVisible = value;
 }
 
+/**
+ * Toggles the visibility of the debug panel.
+ */
 export function toggleDebugPanel() {
   debugPanelVisible = !debugPanelVisible;
 }
 
-// Debug input handling functions
+/**
+ * Handles keyboard input for debug features, including toggling the debug panel, collision debug, weapon debug, and sending teleport requests.
+ * @param {KeyboardEvent} e - The keyboard event to process.
+ * @return {boolean} True if a debug-related key was handled; otherwise, false.
+ */
 export function handleDebugKeydown(e) {
   // Toggle debug panel
   if (e.key === ";") {
@@ -56,7 +66,11 @@ export function handleDebugKeydown(e) {
   return false; // Event not handled
 }
 
-// Add after drawChatInput function
+/**
+ * Renders the debug panel overlay on the game canvas, displaying real-time debug information such as FPS, player stats, object counts, and debug mode statuses.
+ * 
+ * The panel is only drawn if it is visible and the player exists. It includes a semi-transparent background and displays information in a monospace font for clarity.
+ */
 export function drawDebugPanel() {
   if (!debugPanelVisible || !myPlayer) return;
 

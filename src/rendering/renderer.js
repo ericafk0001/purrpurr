@@ -26,7 +26,13 @@ import {
 } from "../utils/constants.js";
 import { isMobileDevice } from "../ui/mobile.js";
 
-// Add debug panel to UI drawing in drawPlayers function
+/**
+ * Renders the entire game scene and UI elements on the canvas.
+ *
+ * Draws the background, world objects (walls, players with interpolated positions, stones, trees) in fixed layers, the world border, optional collision debug overlays, and all UI components including health bars, inventory, chat input, floating numbers, and debug panel. Mobile controls are rendered if the device is mobile.
+ *
+ * @param {number} [interpolation=1] - Interpolation factor for smoothing non-local player movement between previous and current positions.
+ */
 export function drawPlayers(interpolation = 1) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -114,7 +120,9 @@ export function drawPlayers(interpolation = 1) {
     drawMobileControls();
   }
 }
-// Add this function to draw background and grid
+/**
+ * Fills the canvas with the configured background color and optionally draws a grid overlay aligned with the camera position.
+ */
 export function drawBackground() {
   // Fill background with light green
   ctx.fillStyle = config.colors.background;

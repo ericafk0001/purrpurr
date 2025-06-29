@@ -17,6 +17,11 @@ const mouse = {
   y: 0,
 };
 
+/**
+ * Sets the current mouse position in screen coordinates.
+ * @param {number} x - The x-coordinate of the mouse.
+ * @param {number} y - The y-coordinate of the mouse.
+ */
 function setMousePosition(x, y) {
   mouse.x = x;
   mouse.y = y;
@@ -28,7 +33,13 @@ export let needsPositionReconciliation = false;
 export let correctedPosition = null;
 
 // Player functions
-// update updatePosition function
+/**
+ * Updates the player's position based on input, velocity, and collision handling.
+ *
+ * Applies server reconciliation corrections if needed, integrates velocity with decay for smooth movement, processes input from keyboard or virtual keys, normalizes movement, and resolves collisions. Sends updated movement data to the server after applying all adjustments.
+ *
+ * @param {number} deltaTime - The elapsed time since the last update, used to ensure frame-rate independent movement.
+ */
 export function updatePosition(deltaTime) {
   if (!myPlayer) return;
 
@@ -99,7 +110,11 @@ export function updatePosition(deltaTime) {
 
   sendPlayerMovement();
 }
-// modify updateRotation function to use target camera position
+/**
+ * Updates the player's rotation to face the mouse cursor based on the target camera position.
+ * 
+ * Only applies on non-mobile devices. Calculates the angle between the player's position and the mouse's world position, then updates the player's rotation accordingly. Sends the updated movement data to the server.
+ */
 export function updateRotation() {
   // Only update rotation based on mouse for desktop devices
   if (!myPlayer || isMobileDevice) return;
@@ -118,7 +133,10 @@ export function updateRotation() {
   sendPlayerMovement();
 }
 
-// Mouse input handling functions
+/**
+ * Updates the internal mouse position based on a mouse move event.
+ * @param {MouseEvent} e - The mouse move event containing the new cursor coordinates.
+ */
 export function handleMouseMove(e) {
   setMousePosition(e.clientX, e.clientY);
 }

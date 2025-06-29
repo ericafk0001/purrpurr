@@ -12,7 +12,11 @@ export let autoAttackEnabled = false; // New toggle for auto-attack mode
 export const ATTACK_BUFFER_WINDOW = 200; // Buffer window in milliseconds
 export let lastAttackAttempt = 0;
 
-// Modify startAttack function
+/**
+ * Initiates a player attack if the current item supports auto-attack and cooldown conditions are met.
+ *
+ * Starts the attack animation, updates player attack state, and emits an "attackStart" event to the server. Attack initiation is allowed if the cooldown has elapsed or within a buffer window after a recent attempt.
+ */
 export function startAttack() {
   if (!canAutoAttackWithCurrentItem()) return;
 
@@ -46,7 +50,11 @@ export function startAttack() {
     socket.emit("attackStart");
   }
 }
-// Unified attack handler for both desktop and mobile
+/**
+ * Handles attack actions based on the currently active inventory item.
+ *
+ * If the active item is consumable, uses the item. If it is placeable, calculates a position in front of the player and emits a wall placement event to the server. Otherwise, initiates a standard attack.
+ */
 export function handleAttackAction() {
   const activeItem =
     myPlayer?.inventory?.slots[myPlayer?.inventory?.activeSlot];
@@ -71,7 +79,11 @@ export function handleAttackAction() {
   }
 }
 
-// Toggle auto attack function
+/**
+ * Toggles the auto-attack mode for the player.
+ *
+ * If auto-attack is enabled and the currently equipped item supports auto-attacking, immediately initiates an attack.
+ */
 export function toggleAutoAttack() {
   autoAttackEnabled = !autoAttackEnabled;
 
@@ -81,7 +93,10 @@ export function toggleAutoAttack() {
   }
 }
 
-// New helper function to check if current item supports auto-attack
+/**
+ * Determines if the currently active inventory item supports auto-attack.
+ * @return {boolean} True if the active item allows auto-attack; otherwise, false.
+ */
 export function canAutoAttackWithCurrentItem() {
   if (!myPlayer?.inventory?.slots) return false;
 
@@ -93,7 +108,11 @@ export function canAutoAttackWithCurrentItem() {
   return autoAttackableItems.includes(activeItem.id);
 }
 
-// Attack input handling functions
+/**
+ * Handles keyboard input for attack actions, toggling auto-attack mode when the "e" key is pressed.
+ * @param {KeyboardEvent} e - The keyboard event to process.
+ * @return {boolean} True if the event was handled (i.e., "e" key pressed), otherwise false.
+ */
 export function handleAttackKeydown(e) {
   if (e.key.toLowerCase() === "e") {
     toggleAutoAttack();
@@ -103,7 +122,13 @@ export function handleAttackKeydown(e) {
   return false; // Event not handled
 }
 
-// Mouse click handling for attacks
+/**
+ * Handles mouse click events for initiating attacks.
+ * 
+ * If the player is not interacting with chat or inventory UI, triggers the unified attack action and returns `true` to indicate the event was handled. Returns `false` if the click occurs while in chat mode.
+ * @param {MouseEvent} e - The mouse event object.
+ * @return {boolean} `true` if the attack action was triggered; otherwise, `false`.
+ */
 export function handleAttackMouseClick(e) {
   if (!chatMode) {
     // Not clicking inventory, use unified attack handler
@@ -114,15 +139,26 @@ export function handleAttackMouseClick(e) {
   return false; // Event not handled
 }
 
-// Setter functions for external modules
+/**
+ * Sets the attack state to indicate whether an attack is currently in progress.
+ * @param {boolean} value - True if an attack is in progress; otherwise, false.
+ */
 export function setIsAttacking(value) {
   isAttacking = value;
 }
 
+/**
+ * Sets the current progress value of the attack animation.
+ * @param {number} value - The new progress value for the attack animation.
+ */
 export function setAttackAnimationProgress(value) {
   attackAnimationProgress = value;
 }
 
+/**
+ * Updates the timestamp of the last successful attack.
+ * @param {number} value - The new timestamp to set for the last attack time.
+ */
 export function setLastAttackTime(value) {
   lastAttackTime = value;
 }
