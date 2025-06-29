@@ -140,3 +140,27 @@ export function updateRotation() {
 export function handleMouseMove(e) {
   setMousePosition(e.clientX, e.clientY);
 }
+
+/**
+ * Sets the timestamp of the last server synchronization for the player.
+ * @param {number} timestamp - The new server synchronization timestamp.
+ */
+export function setLastServerSync(timestamp) {
+  lastServerSync = timestamp;
+}
+
+/**
+ * Sets whether the player's position requires reconciliation with the server.
+ * @param {boolean} value - True if position reconciliation is needed; otherwise, false.
+ */
+export function setNeedsPositionReconciliation(value) {
+  needsPositionReconciliation = value;
+}
+
+/**
+ * Sets the corrected player position and rotation received from the server.
+ * @param {Object} position - The corrected position and rotation data.
+ */
+export function setCorrectedPosition(position) {
+  correctedPosition = position;
+}

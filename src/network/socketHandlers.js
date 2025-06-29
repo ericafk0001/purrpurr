@@ -14,7 +14,7 @@ import {
 import { clampWithEasing } from "../utils/helpers.js";
 import { addFloatingNumber } from "../rendering/effects.js";
 import { handleInventorySelection } from "../player/inventory.js";
-import { lastServerSync, setNeedsPositionReconciliation, setCorrectedPosition } from "../player/player.js";
+import { setLastServerSync, setNeedsPositionReconciliation, setCorrectedPosition } from "../player/player.js";
 import { wallShakes } from "../rendering/drawWorld.js";
 import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
@@ -275,7 +275,7 @@ socket.on("fullStateSync", (data) => {
 
   // Update our reference to myPlayer
   setMyPlayer(players[socket.id]);
-  lastServerSync = Date.now();
+  setLastServerSync(Date.now());
 });
 
 // Update socket handler for damage
