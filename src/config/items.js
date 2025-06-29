@@ -1,5 +1,4 @@
-// Define items globally so they can be accessed in the browser
-const gameItems = {
+export const gameItems = {
   hammer: {
     id: "hammer",
     name: "Hammer",
@@ -60,13 +59,3 @@ const gameItems = {
     },
   },
 };
-
-// Make items available globally in browser
-if (typeof window !== "undefined") {
-  window.gameItems = gameItems;
-}
-
-// Also support Node.js for server-side
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = gameItems;
-}

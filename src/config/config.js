@@ -1,4 +1,5 @@
-const gameConfig = {
+// Game configuration settings using ES modules
+export const gameConfig = {
   worldWidth: 5000,
   worldHeight: 5000,
   playerRadius: 60,
@@ -121,7 +122,3 @@ const gameConfig = {
     placementBuffer: 0, // Extra space needed around walls
   },
 };
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = gameConfig;
-}
