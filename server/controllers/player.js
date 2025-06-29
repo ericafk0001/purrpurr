@@ -150,7 +150,7 @@ export function handlePlayerDeath(
   });
 
   // Respawn player with full health after delay
-  setTimeout(() => {
+  const respawnTimeout = setTimeout(() => {
     const player = players[playerId];
     if (player && player.isRespawning) {
       const spawnPoint = findSafeSpawnPoint(gameConfig, trees, stones);
@@ -171,5 +171,10 @@ export function handlePlayerDeath(
         inventory: player.inventory,
       });
     }
-  }, 3000); // 3 second respawn delay
+  }, gameConfig.player.respawnDelay || 3000);
+
+  // Store timeout ID for potential cleanup
+  if (player) {
+    player.respawnTimeoutId = respawnTimeout;
+  }
 }

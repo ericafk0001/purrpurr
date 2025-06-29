@@ -14,7 +14,7 @@ import {
 import { clampWithEasing } from "../utils/helpers.js";
 import { addFloatingNumber } from "../rendering/effects.js";
 import { handleInventorySelection } from "../player/inventory.js";
-import { needsPositionReconciliation } from "../player/player.js";
+import { lastServerSync, setNeedsPositionReconciliation, setCorrectedPosition } from "../player/player.js";
 import { wallShakes } from "../rendering/drawWorld.js";
 import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
@@ -242,8 +242,8 @@ socket.on("playerRespawned", (data) => {
 socket.on("positionCorrection", (correctPos) => {
   if (myPlayer) {
     // Set flag to reconcile position on next frame
-    needsPositionReconciliation = true;
-    correctedPosition = correctPos;
+    setNeedsPositionReconciliation(true);
+    setCorrectedPosition(correctPos)
   }
 });
 

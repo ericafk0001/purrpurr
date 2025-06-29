@@ -11,6 +11,11 @@ export let chatMode = false;
 export let chatInput = "";
 export let playerMessages = {}; // store messages for each player
 
+export const chatUIState = {
+  inputBox: null,
+  mobileSendButton: null,
+};
+
 /**
  * Returns whether chat input mode is currently active.
  * @return {boolean} True if chat mode is enabled; otherwise, false.
@@ -67,7 +72,7 @@ export function drawChatInput() {
   ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight);
 
   // Store chat input box position for click detection
-  window.chatInputBox = {
+  chatUIState.inputBox = {
     x: inputBoxX,
     y: inputBoxY,
     width: inputBoxWidth,
@@ -99,7 +104,7 @@ export function drawChatInput() {
     ctx.fillText("SEND", sendButtonX + sendButtonWidth / 2, sendButtonY + 14);
 
     // Store send button position for touch detection
-    window.mobileSendButton = {
+    chatUIState.mobileSendButton = {
       x: sendButtonX,
       y: sendButtonY,
       width: sendButtonWidth,
@@ -113,7 +118,7 @@ export function drawChatInput() {
     ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
 
     // Update chat input box to exclude send button area
-    window.chatInputBox.width = sendButtonX - inputBoxX - 5;
+    chatUIState.inputBox.width = sendButtonX - inputBoxX - 5;
   } else {
     // Desktop version (original)
     ctx.fillStyle = "white";
@@ -124,7 +129,7 @@ export function drawChatInput() {
 }
 /**
  * Renders a chat bubble above the specified player if they have a recent message.
- * 
+ *
  * The chat bubble displays the player's latest message, positioned above their avatar, and automatically expires after a configured duration.
  * @param {Object} player - The player object containing at least `id`, `x`, and `y` properties.
  */

@@ -72,7 +72,7 @@ function updateVirtualMovement() {
  */
 export function handleMovementKeydown(e) {
   // Movement keys
-  if (keys.hasOwnProperty(e.key.toLowerCase())) {
+  if (Object.hasOwn(keys, e.key.toLowerCase())) {
     keys[e.key.toLowerCase()] = true;
     return true; // Event handled
   }
@@ -86,7 +86,7 @@ export function handleMovementKeydown(e) {
  * @return {boolean} True if the event corresponds to a movement key and was handled; otherwise, false.
  */
 export function handleMovementKeyup(e) {
-  if (keys.hasOwnProperty(e.key.toLowerCase())) {
+  if (Object.hasOwn(keys, e.key.toLowerCase())) {
     keys[e.key.toLowerCase()] = false;
     return true; // Event handled
   }

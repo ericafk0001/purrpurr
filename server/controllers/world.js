@@ -6,13 +6,11 @@
 
 export function generateTrees(trees, gameConfig) {
   const cellSize = gameConfig.trees.minDistance;
-  const gridWidth = Math.floor(gameConfig.worldWidth / cellSize);
-  const gridHeight = Math.floor(gameConfig.worldHeight / cellSize);
-
-  // create grid with proper size checks
-  const grid = Array(gridWidth + 1)
+  const gridWidth = Math.floor(gameConfig.worldWidth / cellSize) + 1;
+  const gridHeight = Math.floor(gameConfig.worldHeight / cellSize) + 1;
+  const grid = Array(gridWidth)
     .fill()
-    .map(() => Array(gridHeight + 1).fill(0));
+    .map(() => Array(gridHeight).fill(0));
 
   /**
    * Determines if a given (x, y) position is valid for placing a tree based on grid boundaries and local density constraints.
@@ -94,7 +92,7 @@ export function generateStones(stones, gameConfig) {
     gameConfig.worldWidth * gameConfig.worldHeight * gameConfig.stones.density
   );
 
-  function isValidPosition(x, y, cellX, cellY, grid, maxStonePerCell) {
+  function isValidPosition(cellX, cellY, grid, maxStonePerCell) {
     // ensure we're within grid bounds
     if (
       cellX >= grid.length ||
@@ -133,8 +131,6 @@ export function generateStones(stones, gameConfig) {
 
       if (
         isValidPosition(
-          x,
-          y,
           cellX,
           cellY,
           grid,

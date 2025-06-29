@@ -68,34 +68,6 @@ export function gameLoop(timestamp) {
   // Calculate interpolation fraction for rendering
   const interpolation = accumulatedTime / FIXED_TIMESTEP;
 
-  // Update attack animation
-  if (isAttacking && myPlayer) {
-    const attackTime = Date.now();
-    const attackElapsed = attackTime - lastAttackTime;
-
-    if (attackElapsed <= attackDuration) {
-      // Update animation progress
-      const newProgress = Math.min(1, attackElapsed / attackDuration);
-      setAttackAnimationProgress(newProgress);
-      myPlayer.attackProgress = attackAnimationProgress;
-      myPlayer.attackStartTime = lastAttackTime;
-    } else {
-      // End attack animation
-      setIsAttacking(false);
-      myPlayer.attacking = false;
-      myPlayer.attackProgress = 0;
-      myPlayer.attackStartTime = null;
-      myPlayer.attackStartRotation = null;
-
-      // Queue next attack only if auto-attack is enabled and we have valid weapon
-      if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-        const cooldownRemaining =
-          (items.hammer.cooldown || 800) - attackDuration;
-        setTimeout(startAttack, Math.max(0, cooldownRemaining));
-      }
-    }
-  }
-
   // Render at interpolated state
   const cameraDeltaTime = frameDelta / 1000; // Convert ms to seconds
   updateCamera(cameraDeltaTime);
@@ -134,8 +106,10 @@ export function updateGameLogic(deltaTime) {
 
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-        const cooldownRemaining =
-          (items.hammer.cooldown || 800) - attackDuration;
+        // Get cooldown from the currently equipped weapon
+        const activeItem = myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
+        const weaponCooldown = activeItem ? (items[activeItem.id]?.cooldown || 800) : 800;
+        const cooldownRemaining = weaponCooldown - attackDuration;
         setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
     }
@@ -147,7 +121,9 @@ export function updateGameLogic(deltaTime) {
     if (!player.attacking || !player.attackStartTime) return;
 
     const elapsed = animTime - player.attackStartTime;
-    const attackDuration = items.hammer.useTime || 400;
+    // Get attack duration from player's weapon or use default
+    const activeItem = player.inventory?.slots?.[player.inventory.activeSlot];
+    const attackDuration = activeItem ? (items[activeItem.id]?.useTime || 400) : 400;
 
     // Update animation progress
     if (elapsed <= attackDuration) {

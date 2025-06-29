@@ -254,7 +254,7 @@ export function setupSocketHandlers(
       // Handle consumable items
       if (item.type === "consumable") {
         switch (item.id) {
-          case "apple":
+          case "apple": {
             const didHeal = healPlayer(socket.id, item.healAmount);
 
             // Send appropriate response based on whether healing occurred
@@ -265,6 +265,7 @@ export function setupSocketHandlers(
               success: didHeal,
             });
             break;
+          }
         }
       }
     });

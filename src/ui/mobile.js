@@ -489,7 +489,7 @@ function handleMobileButtonPress(buttonKey) {
       toggleAutoAttack();
       break;
 
-    case "apple":
+    case "apple": {
       // Quick select apple (equivalent to 'q' key)
       const appleSlot = myPlayer?.inventory?.slots.findIndex(
         (item) => item?.id === "apple"
@@ -498,7 +498,7 @@ function handleMobileButtonPress(buttonKey) {
         handleInventorySelection(appleSlot);
       }
       break;
-
+    }
     case "teleport":
       // Teleport (equivalent to 't' key) - only works when debug is enabled
       if (debugPanelVisible) {

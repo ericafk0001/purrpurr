@@ -29,7 +29,8 @@ export function processAttack(
   const endAngle = playerAngle + arcAngle / 2;
 
   // Process wall damage
-  walls.forEach((wall, index) => {
+  for (let index = walls.length - 1; index >= 0; index--) {
+    const wall = walls[index];
     const dx = wall.x - attacker.x;
     const dy = wall.y - attacker.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -53,7 +54,7 @@ export function processAttack(
         }
       }
     }
-  });
+  }
 
   Object.entries(players).forEach(([targetId, target]) => {
     if (targetId === attackerId) return;
@@ -83,29 +84,18 @@ export function processAttack(
         const pointDy = pointY - attacker.y;
         const angleToPoint = Math.atan2(pointDy, pointDx);
 
-        // Normalize angles
-        const normalizedPointAngle =
-          (angleToPoint + Math.PI * 2) % (Math.PI * 2);
-        const normalizedStartAngle = (startAngle + Math.PI * 2) % (Math.PI * 2);
-        const normalizedEndAngle = (endAngle + Math.PI * 2) % (Math.PI * 2);
+        // Use consistent angle normalization
+        const normalizedPointAngle = normalizeAngle(angleToPoint);
+        const normalizedStartAngle = normalizeAngle(startAngle);
+        const normalizedEndAngle = normalizeAngle(endAngle);
 
         // Check if point is within arc
-        if (normalizedStartAngle <= normalizedEndAngle) {
-          if (
-            normalizedPointAngle >= normalizedStartAngle &&
-            normalizedPointAngle <= normalizedEndAngle
-          ) {
-            inArc = true;
-            break;
-          }
-        } else {
-          if (
-            normalizedPointAngle >= normalizedStartAngle ||
-            normalizedPointAngle <= normalizedEndAngle
-          ) {
-            inArc = true;
-            break;
-          }
+        const angleDiff = Math.abs(
+          normalizeAngle(normalizedPointAngle - playerAngle)
+        );
+        if (angleDiff <= arcAngle / 2) {
+          inArc = true;
+          break;
         }
       }
 

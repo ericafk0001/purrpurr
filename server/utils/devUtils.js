@@ -16,16 +16,34 @@ export function setupLiveReload(app, __dirname) {
   // Watch relevant directories for changes
   const watchDirs = [__dirname];
   watchDirs.forEach((dir) => {
-    fs.watch(dir, (filename) => {
-      if (filename && !filename.includes("node_modules")) {
-        lastModified = Date.now();
-      }
-    });
+    try {
+      fs.watch(dir, { recursive: true }, (eventType, filename) => {
+        if (
+          filename &&
+          !filename.includes("node_modules") &&
+          !filename.startsWith(".git") &&
+          (filename.endsWith(".js") ||
+            filename.endsWith(".html") ||
+            filename.endsWith(".css"))
+        ) {
+          lastModified = Date.now();
+        }
+      });
+    } catch (error) {
+      console.warn(`Failed to watch directory ${dir}:`, error);
+    }
   });
 
   // Add endpoint to check last modified time
   app.get("/last-modified", (req, res) => {
-    res.json(lastModified);
+    try {
+      res.json({
+        lastModified,
+        timestamp: new Date(lastModified).toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get last modified time" });
+    }
   });
 
   return { lastModified };

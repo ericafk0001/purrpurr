@@ -34,6 +34,10 @@ export function loadAssets() {
       assets.loadStatus[key] = true;
       console.log(`Loaded item asset: ${key}`);
     };
+    img.onerror = (err) => {
+      console.error(`Failed to load item asset: ${key}`, err);
+      assets.loadStatus[key] = false;
+    };
     img.src = path;
   });
 }
