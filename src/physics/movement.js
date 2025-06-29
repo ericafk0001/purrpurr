@@ -1,6 +1,6 @@
 // Import required variables
 import { keys, myPlayer } from "../utils/constants.js";
-import { virtualKeys, isMobileDevice, touchControls } from "../ui/mobile.js";
+import { virtualKeys, isMobileDevice, touchControls, setVirtualKey, resetVirtualKeys } from "../ui/mobile.js";
 import { sendPlayerMovement } from "../network/socketHandlers.js";
 
 /**
@@ -23,7 +23,7 @@ export function getVirtualKeys() {
  */
 function updateVirtualMovement() {
   if (!touchControls.joystick.active) {
-    virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
+    resetVirtualKeys();
     return;
   }
 
@@ -43,10 +43,10 @@ function updateVirtualMovement() {
 
     // Use a lower threshold for smoother 8-directional movement
     const threshold = 0.2;
-    virtualKeys.w = normalizedY < -threshold;
-    virtualKeys.s = normalizedY > threshold;
-    virtualKeys.a = normalizedX < -threshold;
-    virtualKeys.d = normalizedX > threshold;
+    setVirtualKey('w', normalizedY < -threshold);
+    setVirtualKey('s', normalizedY > threshold);
+    setVirtualKey('a', normalizedX < -threshold);
+    setVirtualKey('d', normalizedX > threshold);
 
     // Auto-face movement direction if enabled
     if (
@@ -61,7 +61,7 @@ function updateVirtualMovement() {
       sendPlayerMovement();
     }
   } else {
-    virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
+    resetVirtualKeys();
   }
 }
 

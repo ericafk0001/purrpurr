@@ -140,3 +140,16 @@ export function updateRotation() {
 export function handleMouseMove(e) {
   setMousePosition(e.clientX, e.clientY);
 }
+
+// Setter functions for player sync variables
+export function setLastServerSync(timestamp) {
+  lastServerSync = timestamp;
+}
+
+export function setNeedsPositionReconciliation(value) {
+  needsPositionReconciliation = value;
+}
+
+export function setCorrectedPosition(position) {
+  correctedPosition = position;
+}

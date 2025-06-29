@@ -982,3 +982,18 @@ export function handleTouchEnd(e) {
     }
   }
 }
+
+// Setter functions for virtual keys
+export function setVirtualKey(key, value) {
+  if (virtualKeys.hasOwnProperty(key)) {
+    virtualKeys[key] = value;
+  }
+}
+
+export function setVirtualKeys(keys) {
+  Object.assign(virtualKeys, keys);
+}
+
+export function resetVirtualKeys() {
+  virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
+}
