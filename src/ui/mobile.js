@@ -985,7 +985,7 @@ export function handleTouchEnd(e) {
 
 // Setter functions for virtual keys
 export function setVirtualKey(key, value) {
-  if (virtualKeys.hasOwnProperty(key)) {
+  if (Object.hasOwn(virtualKeys, key)) {
     virtualKeys[key] = value;
   }
 }
