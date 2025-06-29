@@ -12,14 +12,26 @@ import { normalize, dot, clampWithEasing } from "../utils/helpers.js";
 
 // Collision functions
 
-// add after isinviewport function
+/**
+ * Determines whether two circles overlap based on their positions and radii.
+ * @param {Object} circle1 - The first circle, with properties `x`, `y`, and `radius`.
+ * @param {Object} circle2 - The second circle, with properties `x`, `y`, and `radius`.
+ * @return {boolean} True if the circles overlap; otherwise, false.
+ */
 export function checkCollision(circle1, circle2) {
   const dx = circle1.x - circle2.x;
   const dy = circle1.y - circle2.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
   return distance < circle1.radius + circle2.radius;
 }
-// replace handlecollisions function
+/**
+ * Adjusts the player's intended movement vector to prevent overlapping with static obstacles.
+ *
+ * Checks the proposed movement against all trees, stones, and walls, and modifies the movement vector so the player slides along obstacles instead of penetrating them.
+ * @param {number} dx - Proposed movement along the x-axis.
+ * @param {number} dy - Proposed movement along the y-axis.
+ * @return {{dx: number, dy: number}} The adjusted movement vector that avoids obstacle penetration.
+ */
 export function handleCollisions(dx, dy) {
   if (!myPlayer) return { dx, dy };
 
@@ -76,6 +88,11 @@ export function handleCollisions(dx, dy) {
   return { dx: finalDx, dy: finalDy };
 }
 
+/**
+ * Resolves collisions between the local player and other players by applying separation forces to prevent overlap.
+ *
+ * If the local player overlaps with another player, applies a damped push to both players to separate them, distributing the displacement unevenly. Adds random jitter if deeply overlapping to help prevent players from getting stuck, and clamps the local player's position within world bounds.
+ */
 export function resolvePlayerCollisions() {
   if (!myPlayer) return;
 
@@ -127,6 +144,11 @@ export function resolvePlayerCollisions() {
     }
   }
 }
+/**
+ * Resolves and corrects any penetration of the local player into static obstacles such as trees and stones.
+ *
+ * If the player is found overlapping with any static obstacle, calculates the average push vector needed to move the player out of all penetrations, applies a damped correction, and clamps the player's position within world bounds.
+ */
 export function resolveCollisionPenetration() {
   if (!myPlayer) return;
 
@@ -192,7 +214,11 @@ export function resolveCollisionPenetration() {
     );
   }
 }
-// Add after resolvePlayerCollisions function
+/**
+ * Resolves collisions between the local player and walls by applying a push force to move the player out of overlapping walls.
+ *
+ * If the player is deeply embedded in a wall, a small random jitter is added to help prevent the player from getting stuck.
+ */
 export function resolveWallCollisions() {
   if (!myPlayer) return;
 

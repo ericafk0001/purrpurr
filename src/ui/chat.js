@@ -11,23 +11,43 @@ export let chatMode = false;
 export let chatInput = "";
 export let playerMessages = {}; // store messages for each player
 
-// Getter and setter functions for chat state
+/**
+ * Returns whether chat input mode is currently active.
+ * @return {boolean} True if chat mode is enabled; otherwise, false.
+ */
 export function getChatMode() {
   return chatMode;
 }
 
+/**
+ * Sets the chat mode state to enable or disable chat input.
+ * @param {boolean} mode - If true, activates chat input mode; if false, deactivates it.
+ */
 export function setChatMode(mode) {
   chatMode = mode;
 }
 
+/**
+ * Returns the current text entered in the chat input field.
+ * @return {string} The current chat input text.
+ */
 export function getChatInput() {
   return chatInput;
 }
 
+/**
+ * Sets the current chat input text.
+ * @param {string} input - The text to set as the current chat input.
+ */
 export function setChatInput(input) {
   chatInput = input;
 }
 
+/**
+ * Renders the chat input box on the canvas when chat mode is active.
+ *
+ * On desktop, displays a text input area with a blinking cursor. On mobile devices, includes a "SEND" button and adjusts the input area to avoid overlap. Stores the positions of the input box and send button in global variables for interaction detection.
+ */
 export function drawChatInput() {
   // Only draw chat input when in chat mode
   if (!chatMode) return;
@@ -102,6 +122,12 @@ export function drawChatInput() {
     ctx.fillText("Chat: " + chatInput + "|", 15, canvas.height - 20);
   }
 }
+/**
+ * Renders a chat bubble above the specified player if they have a recent message.
+ * 
+ * The chat bubble displays the player's latest message, positioned above their avatar, and automatically expires after a configured duration.
+ * @param {Object} player - The player object containing at least `id`, `x`, and `y` properties.
+ */
 export function drawChatBubble(player) {
   const message = playerMessages[player.id];
   if (!message) return;
@@ -128,7 +154,12 @@ export function drawChatBubble(player) {
   ctx.fillText(message.text, bubbleX, bubbleY + 16);
 }
 
-// Helper function to send chat message and avoid code duplication
+/**
+ * Sends a chat message after validating and truncating its length.
+ *
+ * Trims the input message, enforces the maximum allowed length, stores it locally for immediate display, and emits it to the server for broadcast.
+ * @param {string} messageText - The message to send.
+ */
 export function sendChatMessage(messageText) {
   if (!messageText || messageText.trim().length === 0) return;
 
@@ -147,7 +178,14 @@ export function sendChatMessage(messageText) {
   });
 }
 
-// Chat input handling functions
+/**
+ * Handles keyboard events for chat input, managing chat mode activation, message sending, and input updates.
+ *
+ * Activates chat mode on Enter, sends messages and exits chat mode on Enter if already active, and exits chat mode on Escape. Updates the chat input string with typed characters or backspace when in chat mode. Integrates with mobile keyboard input when on mobile devices.
+ *
+ * @param {KeyboardEvent} e - The keyboard event to process.
+ * @returns {boolean} True if the event was handled by the chat system; otherwise, false.
+ */
 export function handleChatKeydown(e) {
   if (e.key === "Enter") {
     if (!chatMode) {

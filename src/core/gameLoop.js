@@ -25,7 +25,13 @@ export const FIXED_TIMESTEP = 1000 / 60; // 16.67ms for 60 FPS physics
 export let accumulatedTime = 0;
 export let lastUpdateTime = performance.now();
 
-// Game loop function with fixed timestep physics and variable rendering
+/**
+ * Main game loop that manages fixed timestep physics updates and variable rendering.
+ *
+ * Accumulates elapsed time to process game logic updates at consistent intervals for stable physics simulation, while rendering frames with interpolation for smooth visuals. Handles FPS calculation, player attack animation state, auto-attack scheduling, camera updates, and player rendering. Continuously schedules itself using `requestAnimationFrame`.
+ *
+ * @param {number} timestamp - The current time in milliseconds provided by `requestAnimationFrame`.
+ */
 export function gameLoop(timestamp) {
   const frameTime = performance.now();
   const frameDelta = frameTime - lastFrameTime;
@@ -97,7 +103,13 @@ export function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 }
 
-// New function for fixed timestep updates
+/**
+ * Updates game logic for a fixed timestep, including player attack animations and movement.
+ *
+ * Handles attack animation progress and state transitions for the local player and all other players.
+ * Manages auto-attack queuing if enabled and updates player positions and rotations using the provided fixed timestep.
+ * @param {number} deltaTime - The fixed timestep duration in milliseconds for this update cycle.
+ */
 export function updateGameLogic(deltaTime) {
   if (!myPlayer) return;
 

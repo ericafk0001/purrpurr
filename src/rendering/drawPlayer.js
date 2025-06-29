@@ -2,6 +2,11 @@
 import { ctx, assets, camera, config } from "../utils/constants.js";
 import { drawChatBubble } from "../ui/chat.js";
 
+/**
+ * Renders the player character at its current or interpolated position, applying rotation and attack swing animation, and draws the equipped item and chat bubble if present.
+ * 
+ * The player is drawn relative to the camera, with attack animations smoothly rotating the sprite. If the player has an equipped item, it is rendered with appropriate positioning and scaling. A chat bubble is displayed if the player has active chat content.
+ */
 export function drawPlayer(player) {
   if (assets.player && assets.loadStatus.player) {
     ctx.save();
@@ -57,7 +62,11 @@ export function drawPlayer(player) {
     drawChatBubble(player);
   }
 }
-// New function to draw equipped items - will handle different types
+/**
+ * Draws the player's equipped item on the canvas with appropriate position, scale, and rotation.
+ * 
+ * Uses item-specific rendering parameters to ensure correct placement and orientation relative to the player.
+ */
 export function drawEquippedItem(item, player) {
   ctx.save();
 
@@ -78,7 +87,15 @@ export function drawEquippedItem(item, player) {
 
   ctx.restore();
 }
-// Modify getItemRenderInfo to not add swing animation to item since body is now swinging
+/**
+ * Computes rendering parameters for an equipped item relative to the player.
+ *
+ * Determines the item's position, size, and rotation based on item-specific render options or defaults, ensuring proper scaling and aspect ratio. Special cases for certain item types can adjust these parameters as needed.
+ *
+ * @param {Object} item - The equipped item to render.
+ * @param {Object} player - The player holding the item.
+ * @returns {Object} An object containing x, y, width, height, and rotation for rendering the item.
+ */
 export function getItemRenderInfo(item, player) {
   // Use item-specific render options or defaults
   const renderOpts = item.renderOptions || {};

@@ -9,7 +9,11 @@ import {
   assets,
 } from "../utils/constants.js";
 
-// Update drawHealthBars function for better visibility
+/**
+ * Draws health bars above all players with defined health values.
+ *
+ * For each player, renders a rounded rectangular health bar above their position on the canvas, with the fill proportionate to their current health.
+ */
 export function drawHealthBars() {
   Object.values(players).forEach((player) => {
     // Skip if player doesn't have health
@@ -59,7 +63,11 @@ export function drawHealthBars() {
     ctx.stroke();
   });
 }
-// Draw the inventory UI
+/**
+ * Renders the player's inventory UI at the bottom of the canvas if enabled and available.
+ *
+ * Each inventory slot is drawn as a rounded rectangle, with the active slot highlighted. If a slot contains an item and its asset is loaded, the item image is centered within the slot, preserving its aspect ratio if specified. Slot numbers are displayed in the top-left corner of each slot.
+ */
 export function drawInventory() {
   if (!config.player.inventory.enabled || !myPlayer?.inventory) return;
 
@@ -121,7 +129,11 @@ export function drawInventory() {
   });
 }
 
-// Death screen
+/**
+ * Displays a full-screen overlay with a "You died! Respawning..." message.
+ *
+ * Creates and appends a semi-transparent death screen overlay to the document body, covering the entire viewport.
+ */
 export function showDeathScreen() {
   const deathScreen = document.createElement("div");
   deathScreen.id = "death-screen";
@@ -141,6 +153,9 @@ export function showDeathScreen() {
   document.body.appendChild(deathScreen);
 }
 
+/**
+ * Removes the death screen overlay from the document if it is present.
+ */
 export function hideDeathScreen() {
   const deathScreen = document.getElementById("death-screen");
   if (deathScreen) {

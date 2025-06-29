@@ -1,4 +1,9 @@
-// Collision detection and physics utilities
+/**
+ * Determines whether two circles overlap based on their positions and radii.
+ * @param {{x: number, y: number, radius: number}} circle1 - The first circle.
+ * @param {{x: number, y: number, radius: number}} circle2 - The second circle.
+ * @return {boolean} True if the circles collide; otherwise, false.
+ */
 
 export function checkCollision(circle1, circle2) {
   const dx = circle1.x - circle2.x;
@@ -7,6 +12,11 @@ export function checkCollision(circle1, circle2) {
   return distance < circle1.radius + circle2.radius;
 }
 
+/**
+ * Finds a random spawn position within the game world that does not collide with trees or stones.
+ * Attempts up to 100 times to locate a safe position within a margin from the world boundaries; if unsuccessful, returns the center of the world.
+ * @return {{x: number, y: number}} The coordinates of a safe spawn point.
+ */
 export function findSafeSpawnPoint(gameConfig, trees, stones) {
   const margin = 200;
   let attempts = 0;
@@ -28,6 +38,15 @@ export function findSafeSpawnPoint(gameConfig, trees, stones) {
   return { x: gameConfig.worldWidth / 2, y: gameConfig.worldHeight / 2 };
 }
 
+/**
+ * Determines if a given position is safe for spawning a player, ensuring no collisions with trees or stones (with a safety buffer).
+ * @param {number} x - The x-coordinate of the position to check.
+ * @param {number} y - The y-coordinate of the position to check.
+ * @param {Object} gameConfig - The game configuration object containing collision sizes.
+ * @param {Array} trees - Array of tree objects with position data.
+ * @param {Array} stones - Array of stone objects with position data.
+ * @return {boolean} True if the position is safe for spawning, false otherwise.
+ */
 export function isPositionSafe(x, y, gameConfig, trees, stones) {
   const playerCircle = {
     x: x,
@@ -67,6 +86,12 @@ export function isPositionSafe(x, y, gameConfig, trees, stones) {
   return true;
 }
 
+/**
+ * Attempts to find a valid spawn position within the game world that is not too close to any wall.
+ * @param {Object} gameConfig - The game configuration object containing world dimensions and spawn settings.
+ * @param {Array<Object>} walls - Array of wall objects with position properties.
+ * @return {Object} The coordinates of a valid spawn position, or the world center if none is found after the maximum number of attempts.
+ */
 export function findValidSpawnPosition(gameConfig, walls) {
   let attempts = 0;
   const maxAttempts = gameConfig.player.spawnConfig.maxSpawnAttempts;
@@ -102,6 +127,19 @@ export function findValidSpawnPosition(gameConfig, walls) {
   };
 }
 
+/**
+ * Determines whether a wall can be placed at the specified position without violating minimum distance requirements from existing walls, trees, or stones.
+ * 
+ * The function checks that the proposed wall position is not too close to any existing wall (using a minimum distance threshold) and does not overlap with trees or stones, accounting for their collision sizes and an additional placement buffer.
+ * 
+ * @param {number} x - The x-coordinate of the proposed wall position.
+ * @param {number} y - The y-coordinate of the proposed wall position.
+ * @param {Array} walls - Array of existing wall objects with position data.
+ * @param {Array} trees - Array of tree objects with position data.
+ * @param {Array} stones - Array of stone objects with position data.
+ * @param {Object} gameConfig - Game configuration object containing collision sizes and placement rules.
+ * @return {boolean} True if the wall placement is valid; otherwise, false.
+ */
 export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
   const wallRadius = gameConfig.collision.sizes.wall;
   const minDistance = gameConfig.walls.minDistance;

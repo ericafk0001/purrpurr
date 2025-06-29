@@ -47,23 +47,42 @@ export const assets = {
   },
 };
 
-// Setter functions for variables that need to be reassigned from other modules
+/**
+ * Replaces the current players object with a new set of players.
+ * @param {Object} newPlayers - The updated players object.
+ */
 export function setPlayers(newPlayers) {
   players = newPlayers;
 }
 
+/**
+ * Updates the current player's state.
+ * @param {object|null} player - The new player object or null to clear the current player.
+ */
 export function setMyPlayer(player) {
   myPlayer = player;
 }
 
+/**
+ * Updates the array of tree objects in the game state.
+ * @param {Array} newTrees - The new array of tree objects to set.
+ */
 export function setTrees(newTrees) {
   trees = newTrees;
 }
 
+/**
+ * Updates the global stones array with a new set of stone objects.
+ * @param {Array} newStones - The new array of stone objects to assign.
+ */
 export function setStones(newStones) {
   stones = newStones;
 }
 
+/**
+ * Updates the current array of wall objects in the game state.
+ * @param {Array} newWalls - The new array of wall objects to set.
+ */
 export function setWalls(newWalls) {
   walls = newWalls;
 }
