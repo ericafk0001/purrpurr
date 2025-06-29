@@ -958,9 +958,9 @@ export function handleTouchMove(e) {
 }
 
 /**
- * Handles touch end events to reset the virtual joystick state when the controlling touch is released.
- * 
- * Deactivates the joystick, returns the knob to its center position, and clears the associated touch identifier.
+ * Resets the virtual joystick state when the controlling touch ends.
+ *
+ * Deactivates the joystick, centers the knob, and clears the touch identifier if the released touch was controlling the joystick.
  */
 export function handleTouchEnd(e) {
   e.preventDefault();
@@ -983,17 +983,32 @@ export function handleTouchEnd(e) {
   }
 }
 
-// Setter functions for virtual keys
+/**
+ * Sets the state of a virtual movement key.
+ * 
+ * Updates the specified key in the `virtualKeys` object to the given boolean value if the key exists.
+ * @param {string} key - The movement key to update (e.g., 'w', 'a', 's', 'd').
+ * @param {boolean} value - The new state for the key.
+ */
 export function setVirtualKey(key, value) {
   if (Object.hasOwn(virtualKeys, key)) {
     virtualKeys[key] = value;
   }
 }
 
+/**
+ * Updates the state of multiple virtual directional keys.
+ * 
+ * Merges the provided key-value pairs into the `virtualKeys` object, updating the state of any specified keys.
+ * @param {Object} keys - An object mapping key names (e.g., 'w', 'a', 's', 'd') to boolean values.
+ */
 export function setVirtualKeys(keys) {
   Object.assign(virtualKeys, keys);
 }
 
+/**
+ * Resets all virtual movement keys (`w`, `a`, `s`, `d`) to the inactive state.
+ */
 export function resetVirtualKeys() {
   virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
 }
