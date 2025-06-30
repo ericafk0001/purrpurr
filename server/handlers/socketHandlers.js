@@ -140,12 +140,17 @@ export function setupSocketHandlers(
             // Check if player is within damage area of the spike
             if (distance < damageDistance) {
               // Only damage if enough time has passed since last spike damage for this player
+              // Initialize spike damage tracking if needed
+              if (!player.spikeDamageTimes) {
+                player.spikeDamageTimes = {};
+              }
+              
               if (
-                !player.lastSpikeDamageTime ||
-                now - player.lastSpikeDamageTime >=
+                !player.spikeDamageTimes[spike.id] ||
+                now - player.spikeDamageTimes[spike.id] >=
                   gameConfig.spikes.damageInterval
               ) {
-                player.lastSpikeDamageTime = now;
+                player.spikeDamageTimes[spike.id] = now;
 
                 // Damage the player
                 gameFunctions.damagePlayer(
@@ -389,7 +394,8 @@ export function setupSocketHandlers(
 
       // Add spike to world with health
       const spike = {
-        id: "spike", // Add id to identify as spike for knockback
+        id: `spike-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: "spike",
         x: position.x,
         y: position.y,
         radius: gameConfig.collision.sizes.spike,

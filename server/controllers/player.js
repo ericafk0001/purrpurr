@@ -62,7 +62,7 @@ export function damagePlayer(
   // Determine knockback settings based on attacker type
   let weaponKnockback;
 
-  if (attacker && attacker.id === "spike") {
+  if (attacker && attacker.type === "spike") {
     // If attacker is a spike, use spike knockback settings from items
     weaponKnockback = gameItems.spike.knockback;
   } else {
