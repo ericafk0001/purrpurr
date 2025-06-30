@@ -128,16 +128,16 @@ export function findValidSpawnPosition(gameConfig, walls) {
 }
 
 /**
- * Determines whether a wall can be placed at the specified position without violating minimum distance requirements from existing walls, trees, or stones.
+ * Checks if a wall can be placed at the given coordinates without being too close to existing walls, trees, or stones.
  *
- * The function checks that the proposed wall position is not too close to any existing wall (using a minimum distance threshold) and does not overlap with trees or stones, accounting for their collision sizes and an additional placement buffer.
+ * Ensures the proposed wall position meets minimum distance requirements from other walls and does not overlap with trees or stones, factoring in collision sizes and a placement buffer.
  *
- * @param {number} x - The x-coordinate of the proposed wall position.
- * @param {number} y - The y-coordinate of the proposed wall position.
- * @param {Array} walls - Array of existing wall objects with position data.
- * @param {Array} trees - Array of tree objects with position data.
- * @param {Array} stones - Array of stone objects with position data.
- * @param {Object} gameConfig - Game configuration object containing collision sizes and placement rules.
+ * @param {number} x - The x-coordinate for the proposed wall.
+ * @param {number} y - The y-coordinate for the proposed wall.
+ * @param {Array} walls - Existing wall objects with position data.
+ * @param {Array} trees - Tree objects with position data.
+ * @param {Array} stones - Stone objects with position data.
+ * @param {Object} gameConfig - Game configuration with collision sizes and placement rules.
  * @return {boolean} True if the wall placement is valid; otherwise, false.
  */
 export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
@@ -181,17 +181,17 @@ export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
 }
 
 /**
- * Determines whether a spike can be placed at the specified position without violating minimum distance requirements from existing spikes, walls, trees, or stones.
+ * Checks if a spike can be placed at the given coordinates without being too close to existing spikes, walls, trees, or stones.
  *
- * The function checks that the proposed spike position is not too close to any existing spike or wall (using minimum distance thresholds) and does not overlap with trees or stones, accounting for their collision sizes and an additional placement buffer.
+ * Ensures the proposed spike position meets minimum distance requirements from other spikes and walls, and does not overlap with trees or stones, factoring in collision radii and a placement buffer.
  *
- * @param {number} x - The x-coordinate of the proposed spike position.
- * @param {number} y - The y-coordinate of the proposed spike position.
- * @param {Array} spikes - Array of existing spike objects with position data.
- * @param {Array} walls - Array of existing wall objects with position data.
- * @param {Array} trees - Array of tree objects with position data.
- * @param {Array} stones - Array of stone objects with position data.
- * @param {Object} gameConfig - Game configuration object containing collision sizes and placement rules.
+ * @param {number} x - The x-coordinate for the spike placement.
+ * @param {number} y - The y-coordinate for the spike placement.
+ * @param {Array} spikes - Existing spikes with position data.
+ * @param {Array} walls - Existing walls with position data.
+ * @param {Array} trees - Existing trees with position data.
+ * @param {Array} stones - Existing stones with position data.
+ * @param {Object} gameConfig - Game configuration with collision sizes and placement rules.
  * @return {boolean} True if the spike placement is valid; otherwise, false.
  */
 export function isValidSpikePosition(

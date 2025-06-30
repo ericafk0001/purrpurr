@@ -687,9 +687,9 @@ function adjustViewportForKeyboard() {
 }
 
 /**
- * Restores the original viewport and body styles after the mobile keyboard is hidden.
+ * Restores the original viewport and body styles after hiding the mobile keyboard.
  *
- * Resets any transformations, transitions, and event listeners added for keyboard handling on mobile devices.
+ * Resets body styles, removes transformations and transitions, and cleans up event listeners used for mobile keyboard handling.
  */
 function resetViewportForKeyboard() {
   if (isMobileDevice) {

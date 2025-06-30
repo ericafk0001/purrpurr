@@ -51,9 +51,9 @@ export function startAttack() {
   }
 }
 /**
- * Handles attack actions based on the currently active inventory item.
+ * Executes the appropriate attack or item action based on the currently active inventory item.
  *
- * If the active item is consumable, uses the item. If it is placeable, calculates a position in front of the player and emits a wall placement event to the server. Otherwise, initiates a standard attack.
+ * Uses consumable items, places walls or spikes in front of the player if a placeable item is selected, or initiates a standard attack for other item types.
  */
 export function handleAttackAction() {
   const activeItem =

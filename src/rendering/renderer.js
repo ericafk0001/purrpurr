@@ -29,9 +29,9 @@ import {
 import { isMobileDevice } from "../ui/mobile.js";
 
 /**
- * Renders the entire game scene and UI elements on the canvas.
+ * Renders the complete game scene and user interface on the canvas.
  *
- * Draws the background, world objects (walls, players with interpolated positions, stones, trees) in fixed layers, the world border, optional collision debug overlays, and all UI components including health bars, inventory, chat input, floating numbers, and debug panel. Mobile controls are rendered if the device is mobile.
+ * Draws the background, world objects (walls, spikes, players with interpolated positions, stones, trees) in fixed layers, the world border, optional collision debug overlays, and all UI components including health bars, inventory, chat input, floating numbers, and debug panel. Mobile controls are rendered if the device is mobile.
  *
  * @param {number} [interpolation=1] - Interpolation factor for smoothing non-local player movement between previous and current positions.
  */

@@ -27,9 +27,9 @@ import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
 import { updateCamera } from "../core/camera.js";
 
 /**
- * Sends the local player's current position and rotation to the server.
+ * Emits the local player's position and rotation to the server for multiplayer synchronization.
  *
- * Emits a "playerMovement" event with the player's coordinates and rotation for synchronization in the multiplayer game.
+ * If the local player is undefined, no event is emitted.
  */
 export function sendPlayerMovement() {
   if (!myPlayer) return;
