@@ -135,7 +135,7 @@ export function isInViewport(object) {
  * @param {Object} spike - The spike object with position, rotation, and health properties.
  */
 export function drawSpike(spike) {
-  if (assets.spike) {
+  if (assets.spike && assets.loadStatus.spike) {
     ctx.save();
     // Calculate shake offset
     let shakeX = 0;

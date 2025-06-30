@@ -220,12 +220,8 @@ export function resolveCollisionPenetration() {
     );
   }
 }
-/**
- * Resolves overlaps between the local player and walls by pushing the player out of any intersecting wall.
- *
- * Applies a damped push force to separate the player from overlapping walls, and adds random jitter if the player is deeply embedded to help prevent sticking.
- */
-export function resolveWallCollisions() {
+
+function resolveEntityCollisions(entities, entityType, collisionSize) {
   if (!myPlayer) return;
 
   const playerCircle = {
@@ -234,57 +230,11 @@ export function resolveWallCollisions() {
     radius: config.collision.sizes.player,
   };
 
-  // Handle wall collisions separately with push behavior
-  walls.forEach((wall) => {
-    const dx = playerCircle.x - wall.x;
-    const dy = playerCircle.y - wall.y;
+  entities.forEach((entity) => {
+    const dx = playerCircle.x - entity.x;
+    const dy = playerCircle.y - entity.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    const minDist = playerCircle.radius + config.collision.sizes.wall;
-
-    if (distance < minDist && distance > 0) {
-      // Calculate overlap and create a push force
-      const overlap = minDist - distance;
-      const pushForce = Math.min(overlap * 0.5, config.moveSpeed);
-      const dampingFactor = 0.8;
-
-      // Normalize direction and apply push force
-      const pushX = (dx / distance) * pushForce * dampingFactor;
-      const pushY = (dy / distance) * pushForce * dampingFactor;
-
-      // Apply the push to move player out of wall
-      myPlayer.x += pushX;
-      myPlayer.y += pushY;
-
-      // Add small random jitter to help unstuck
-      if (distance < minDist * 0.5) {
-        const jitter = 0.5;
-        myPlayer.x += (Math.random() - 0.5) * jitter;
-        myPlayer.y += (Math.random() - 0.5) * jitter;
-      }
-    }
-  });
-}
-
-/**
- * Moves the local player out of overlapping spikes by applying a damped push force.
- *
- * If the player is deeply embedded in a spike, adds a small random jitter to help prevent sticking.
- */
-export function resolveSpikeCollisions() {
-  if (!myPlayer) return;
-
-  const playerCircle = {
-    x: myPlayer.x,
-    y: myPlayer.y,
-    radius: config.collision.sizes.player,
-  };
-
-  // Handle spike collisions separately with push behavior
-  spikes.forEach((spike) => {
-    const dx = playerCircle.x - spike.x;
-    const dy = playerCircle.y - spike.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const minDist = playerCircle.radius + config.collision.sizes.spike;
+    const minDist = playerCircle.radius + collisionSize;
 
     if (distance < minDist && distance > 0) {
       // Calculate overlap and create a push force
@@ -308,4 +258,12 @@ export function resolveSpikeCollisions() {
       }
     }
   });
+}
+
+export function resolveWallCollisions() {
+  resolveEntityCollisions(walls, "wall", config.collision.sizes.wall);
+}
+
+export function resolveSpikeCollisions() {
+  resolveEntityCollisions(spikes, "spike", config.collision.sizes.spike);
 }

@@ -29,61 +29,68 @@ export function processAttack(
   const startAngle = playerAngle - arcAngle / 2;
   const endAngle = playerAngle + arcAngle / 2;
 
-  // Process wall damage
-  for (let index = walls.length - 1; index >= 0; index--) {
-    const wall = walls[index];
-    const dx = wall.x - attacker.x;
-    const dy = wall.y - attacker.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+  // Extract shared damage processing logic
+  function processDamageToEntity(
+    entities,
+    entityType,
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  ) {
+    for (let index = entities.length - 1; index >= 0; index--) {
+      const entity = entities[index];
+      const dx = entity.x - attacker.x;
+      const dy = entity.y - attacker.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance <= attackRange + gameConfig.collision.sizes.wall) {
-      const angleToWall = Math.atan2(dy, dx);
-      const angleDiff = Math.abs(normalizeAngle(angleToWall - playerAngle));
+      if (distance <= attackRange + gameConfig.collision.sizes[entityType]) {
+        const angleToEntity = Math.atan2(dy, dx);
+        const angleDiff = Math.abs(normalizeAngle(angleToEntity - playerAngle));
 
-      if (angleDiff <= arcAngle / 2) {
-        wall.health -= weapon.damage || 15;
+        if (angleDiff <= arcAngle / 2) {
+          entity.health -= weapon.damage || 15;
 
-        if (wall.health <= 0) {
-          walls.splice(index, 1);
-          io.emit("wallDestroyed", { x: wall.x, y: wall.y });
-        } else {
-          io.emit("wallDamaged", {
-            x: wall.x,
-            y: wall.y,
-            health: wall.health,
-          });
+          if (entity.health <= 0) {
+            entities.splice(index, 1);
+            io.emit(`${entityType}Destroyed`, { x: entity.x, y: entity.y });
+          } else {
+            io.emit(`${entityType}Damaged`, {
+              x: entity.x,
+              y: entity.y,
+              health: entity.health,
+            });
+          }
         }
       }
     }
   }
-
-  // Process spike damage
-  for (let index = spikes.length - 1; index >= 0; index--) {
-    const spike = spikes[index];
-    const dx = spike.x - attacker.x;
-    const dy = spike.y - attacker.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance <= attackRange + gameConfig.collision.sizes.spike) {
-      const angleToSpike = Math.atan2(dy, dx);
-      const angleDiff = Math.abs(normalizeAngle(angleToSpike - playerAngle));
-
-      if (angleDiff <= arcAngle / 2) {
-        spike.health -= weapon.damage || 15;
-
-        if (spike.health <= 0) {
-          spikes.splice(index, 1);
-          io.emit("spikeDestroyed", { x: spike.x, y: spike.y });
-        } else {
-          io.emit("spikeDamaged", {
-            x: spike.x,
-            y: spike.y,
-            health: spike.health,
-          });
-        }
-      }
-    }
-  }
+  // Process damage to destructible entities
+  processDamageToEntity(
+    walls,
+    "wall",
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  );
+  processDamageToEntity(
+    spikes,
+    "spike",
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  );
 
   Object.entries(players).forEach(([targetId, target]) => {
     if (targetId === attackerId) return;

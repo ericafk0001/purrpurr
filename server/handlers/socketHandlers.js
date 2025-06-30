@@ -274,7 +274,7 @@ export function setupSocketHandlers(
       });
 
       // Process attack immediately instead of waiting
-      processAttack(socket.id);
+      processAttack(socket.id, players, walls, spikes, gameConfig);
 
       // End attack state after animation
       setTimeout(() => {
