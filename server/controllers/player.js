@@ -1,5 +1,6 @@
 // Player management, health, and inventory functions
 import { findSafeSpawnPoint } from "../utils/collision.js";
+import { gameItems } from "../../src/config/items.js";
 
 /**
  * Broadcasts the specified player's current health and related state to all connected clients.
@@ -21,7 +22,7 @@ export function broadcastHealthUpdate(playerId, players, io, gameConfig) {
 
 /**
  * Broadcasts the specified player's inventory to all connected clients.
- * 
+ *
  * Emits a "playerInventoryUpdate" event containing the player's ID and current inventory.
  * Does nothing if the player does not exist.
  */
@@ -36,14 +37,14 @@ export function broadcastInventoryUpdate(playerId, players, io) {
 }
 
 /**
- * Applies damage to a player, updates their health, and applies knockback if attacked by another player.
+ * Damages a player by reducing their health and applies knockback if attacked, broadcasting the updated health to all clients.
  *
- * Reduces the specified player's health by the given amount, applies knockback based on the attacker's weapon if present, and broadcasts the updated health to all clients. If the player's health drops to zero from a positive value, triggers the death and respawn process.
+ * If the attacker is a spike, uses spike-specific knockback settings; otherwise, uses the attacker's active weapon or default knockback. Triggers the death and respawn process if the player's health drops to zero from a positive value.
  *
  * @param {string} playerId - The ID of the player receiving damage.
  * @param {number} amount - The amount of damage to apply.
- * @param {object} attacker - The attacking player object, or null if not applicable.
- * @return {boolean} Returns true if damage was applied; false if the player does not exist.
+ * @param {object|null} attacker - The attacking player object or null if not applicable.
+ * @return {boolean} True if damage was applied; false if the player does not exist.
  */
 export function damagePlayer(
   playerId,
@@ -58,11 +59,18 @@ export function damagePlayer(
   const player = players[playerId];
   if (!player) return false;
 
-  // Get attacker's active weapon
-  const attackerWeapon =
-    attacker?.inventory?.slots[attacker.inventory.activeSlot];
-  const weaponKnockback =
-    attackerWeapon?.knockback || gameConfig.player.knockback;
+  // Determine knockback settings based on attacker type
+  let weaponKnockback;
+
+  if (attacker && attacker.type === "spike") {
+    // If attacker is a spike, use spike knockback settings from items
+    weaponKnockback = gameItems.spike.knockback;
+  } else {
+    // For other attackers, get their active weapon
+    const attackerWeapon =
+      attacker?.inventory?.slots[attacker.inventory.activeSlot];
+    weaponKnockback = attackerWeapon?.knockback || gameConfig.player.knockback;
+  }
 
   const oldHealth = player.health;
   player.health = Math.max(0, player.health - amount);

@@ -687,9 +687,9 @@ function adjustViewportForKeyboard() {
 }
 
 /**
- * Restores the original viewport and body styles after the mobile keyboard is hidden.
+ * Restores the original viewport and body styles after hiding the mobile keyboard.
  *
- * Resets any transformations, transitions, and event listeners added for keyboard handling on mobile devices.
+ * Resets body styles, removes transformations and transitions, and cleans up event listeners used for mobile keyboard handling.
  */
 function resetViewportForKeyboard() {
   if (isMobileDevice) {
@@ -728,7 +728,7 @@ function resetViewportForKeyboard() {
 }
 /**
  * Handles touch start events for mobile devices, enabling joystick control, UI button interaction, inventory selection and usage, chat input, player rotation, and attack actions.
- * 
+ *
  * Processes each touch to determine if it interacts with the joystick, rotation toggle, menu toggle, mobile menu buttons, inventory slots (including double-tap to use consumables), chat send button, or triggers player actions such as rotation and attack. Exits chat mode if tapping outside chat controls. Prevents default browser behavior to ensure smooth game input handling.
  * @param {TouchEvent} e - The touch start event.
  */
@@ -985,7 +985,7 @@ export function handleTouchEnd(e) {
 
 /**
  * Sets the state of a virtual movement key.
- * 
+ *
  * Updates the specified key in the `virtualKeys` object to the given boolean value if the key exists.
  * @param {string} key - The movement key to update (e.g., 'w', 'a', 's', 'd').
  * @param {boolean} value - The new state for the key.
@@ -998,7 +998,7 @@ export function setVirtualKey(key, value) {
 
 /**
  * Updates the state of multiple virtual directional keys.
- * 
+ *
  * Merges the provided key-value pairs into the `virtualKeys` object, updating the state of any specified keys.
  * @param {Object} keys - An object mapping key names (e.g., 'w', 'a', 's', 'd') to boolean values.
  */

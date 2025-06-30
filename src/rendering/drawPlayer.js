@@ -3,9 +3,9 @@ import { ctx, assets, camera, config } from "../utils/constants.js";
 import { drawChatBubble } from "../ui/chat.js";
 
 /**
- * Renders the player character at its current or interpolated position, applying rotation and attack swing animation, and draws the equipped item and chat bubble if present.
- * 
- * The player is drawn relative to the camera, with attack animations smoothly rotating the sprite. If the player has an equipped item, it is rendered with appropriate positioning and scaling. A chat bubble is displayed if the player has active chat content.
+ * Draws the player character at its current or interpolated position, applying rotation for movement and attack animations, and renders the equipped item and chat bubble if present.
+ *
+ * The player sprite is rendered relative to the camera, with attack swings smoothly animating the sprite's rotation. If the player has an equipped item, it is drawn with appropriate positioning and scaling. A chat bubble is displayed if the player has active chat content.
  */
 export function drawPlayer(player) {
   if (assets.player && assets.loadStatus.player) {
@@ -63,9 +63,9 @@ export function drawPlayer(player) {
   }
 }
 /**
- * Draws the player's equipped item on the canvas with appropriate position, scale, and rotation.
- * 
- * Uses item-specific rendering parameters to ensure correct placement and orientation relative to the player.
+ * Renders the player's equipped item on the canvas at the correct position, scale, and rotation relative to the player.
+ *
+ * Uses item-specific rendering parameters to ensure the item appears naturally in the player's hands.
  */
 export function drawEquippedItem(item, player) {
   ctx.save();
@@ -88,13 +88,13 @@ export function drawEquippedItem(item, player) {
   ctx.restore();
 }
 /**
- * Computes rendering parameters for an equipped item relative to the player.
+ * Calculates rendering parameters for an equipped item relative to the player, including position offsets, size, and rotation.
  *
- * Determines the item's position, size, and rotation based on item-specific render options or defaults, ensuring proper scaling and aspect ratio. Special cases for certain item types can adjust these parameters as needed.
+ * Uses item-specific render options when available, with defaults for scaling and aspect ratio. Adjusts rotation and other parameters for certain item types such as "hammer" and "spike".
  *
  * @param {Object} item - The equipped item to render.
  * @param {Object} player - The player holding the item.
- * @returns {Object} An object containing x, y, width, height, and rotation for rendering the item.
+ * @returns {Object} Rendering parameters: x and y offsets, width, height, and rotation angle.
  */
 export function getItemRenderInfo(item, player) {
   // Use item-specific render options or defaults
@@ -139,6 +139,11 @@ export function getItemRenderInfo(item, player) {
   switch (item.id) {
     case "hammer":
       // No additional rotation for hammer since the entire body rotates now
+      break;
+
+    case "spike":
+      // Make spike held orientation match placement orientation
+      info.rotation = renderOpts.rotationOffset || 0;
       break;
 
     // Add more cases for future items here

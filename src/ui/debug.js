@@ -67,9 +67,9 @@ export function handleDebugKeydown(e) {
 }
 
 /**
- * Renders the debug panel overlay on the game canvas, displaying real-time debug information such as FPS, player stats, object counts, and debug mode statuses.
- * 
- * The panel is only drawn if it is visible and the player exists. It includes a semi-transparent background and displays information in a monospace font for clarity.
+ * Draws the debug panel overlay on the game canvas, showing real-time information such as FPS, player position, health, object counts, and debug mode statuses.
+ *
+ * The panel is rendered only when visible and a player exists, providing a semi-transparent background and organized debug details in a monospace font.
  */
 export function drawDebugPanel() {
   if (!debugPanelVisible || !myPlayer) return;

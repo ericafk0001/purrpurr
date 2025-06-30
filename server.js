@@ -17,6 +17,7 @@ import { generateTrees, generateStones } from "./server/controllers/world.js";
 import {
   findValidSpawnPosition,
   isValidWallPlacement,
+  isValidSpikePosition,
 } from "./server/utils/collision.js";
 import { processAttack } from "./server/controllers/combat.js";
 import { setupSocketHandlers } from "./server/handlers/socketHandlers.js";
@@ -49,6 +50,7 @@ const players = {};
 const trees = [];
 const stones = [];
 const walls = [];
+const spikes = [];
 
 // Setup development utilities
 setupLiveReload(app, __dirname);
@@ -79,6 +81,7 @@ const gameFunctions = {
       attackerId,
       players,
       walls,
+      spikes,
       gameConfig,
       io,
       (playerId, amount, attacker) =>
@@ -95,6 +98,8 @@ const gameFunctions = {
     ),
   isValidWallPlacement: (x, y) =>
     isValidWallPlacement(x, y, walls, trees, stones, gameConfig),
+  isValidSpikePosition: (x, y) =>
+    isValidSpikePosition(x, y, spikes, walls, trees, stones, gameConfig),
   findValidSpawnPosition: () => findValidSpawnPosition(gameConfig, walls),
 };
 
@@ -105,6 +110,7 @@ setupSocketHandlers(
   trees,
   stones,
   walls,
+  spikes,
   gameConfig,
   gameItems,
   gameFunctions
