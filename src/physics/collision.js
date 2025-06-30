@@ -6,6 +6,7 @@ import {
   trees,
   stones,
   walls,
+  spikes,
   socket,
 } from "../utils/constants.js";
 import { normalize, dot, clampWithEasing } from "../utils/helpers.js";
@@ -59,6 +60,11 @@ export function handleCollisions(dx, dy) {
       x: wall.x,
       y: wall.y,
       radius: config.collision.sizes.wall,
+    })),
+    ...spikes.map((spike) => ({
+      x: spike.x,
+      y: spike.y,
+      radius: config.collision.sizes.spike,
     })),
   ];
 
@@ -246,6 +252,51 @@ export function resolveWallCollisions() {
       const pushY = (dy / distance) * pushForce * dampingFactor;
 
       // Apply the push to move player out of wall
+      myPlayer.x += pushX;
+      myPlayer.y += pushY;
+
+      // Add small random jitter to help unstuck
+      if (distance < minDist * 0.5) {
+        const jitter = 0.5;
+        myPlayer.x += (Math.random() - 0.5) * jitter;
+        myPlayer.y += (Math.random() - 0.5) * jitter;
+      }
+    }
+  });
+}
+
+/**
+ * Resolves collisions between the local player and spikes by applying a push force to move the player out of overlapping spikes.
+ *
+ * If the player is deeply embedded in a spike, a small random jitter is added to help prevent the player from getting stuck.
+ */
+export function resolveSpikeCollisions() {
+  if (!myPlayer) return;
+
+  const playerCircle = {
+    x: myPlayer.x,
+    y: myPlayer.y,
+    radius: config.collision.sizes.player,
+  };
+
+  // Handle spike collisions separately with push behavior
+  spikes.forEach((spike) => {
+    const dx = playerCircle.x - spike.x;
+    const dy = playerCircle.y - spike.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const minDist = playerCircle.radius + config.collision.sizes.spike;
+
+    if (distance < minDist && distance > 0) {
+      // Calculate overlap and create a push force
+      const overlap = minDist - distance;
+      const pushForce = Math.min(overlap * 0.5, config.moveSpeed);
+      const dampingFactor = 0.8;
+
+      // Normalize direction and apply push force
+      const pushX = (dx / distance) * pushForce * dampingFactor;
+      const pushY = (dy / distance) * pushForce * dampingFactor;
+
+      // Apply the push to move player out of spike
       myPlayer.x += pushX;
       myPlayer.y += pushY;
 

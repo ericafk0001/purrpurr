@@ -107,6 +107,7 @@ export const gameConfig = {
       tree: 70,
       stone: 65,
       wall: 35, // Add wall collision size
+      spike: 35, // Spikes are same size as walls
     },
   },
   chat: {
@@ -120,5 +121,12 @@ export const gameConfig = {
     minDistance: 70, // Minimum distance between walls
     maxWallsPerCell: 3, // Max walls in a grid cell
     placementBuffer: 0, // Extra space needed around walls
+  },
+  spikes: {
+    minDistance: 60, // Minimum distance between spikes (smaller than walls)
+    maxSpikesPerCell: 4, // Max spikes in a grid cell (more than walls)
+    placementBuffer: 0, // Extra space needed around spikes
+    damageInterval: 1000, // How often spikes can damage the same player (in ms)
+    damageRadius: 5, // Extra pixels beyond collision circle for damage area
   },
 };

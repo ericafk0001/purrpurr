@@ -7,6 +7,7 @@ import {
   trees,
   stones,
   walls,
+  spikes,
   items,
 } from "../utils/constants.js";
 import { isInViewport } from "./drawWorld.js";
@@ -67,9 +68,9 @@ export function drawFloatingNumbers() {
 }
 /**
  * Adds a floating number effect at the specified position to display a value such as damage or healing.
- * 
+ *
  * The floating number will animate with a randomized horizontal spread and upward motion, fading out over a fixed duration. The `type` parameter determines the color or style (e.g., "damage" or "heal").
- * 
+ *
  * @param {number} x - The x-coordinate where the floating number appears.
  * @param {number} y - The y-coordinate where the floating number appears.
  * @param {number} value - The numeric value to display, rounded to the nearest integer.
@@ -147,6 +148,21 @@ export function drawCollisionCircles() {
         wall.x - camera.x,
         wall.y - camera.y,
         config.collision.sizes.wall,
+        0,
+        Math.PI * 2
+      );
+      ctx.stroke();
+    }
+  });
+
+  // Add spike collision circles
+  spikes.forEach((spike) => {
+    if (isInViewport(spike)) {
+      ctx.beginPath();
+      ctx.arc(
+        spike.x - camera.x,
+        spike.y - camera.y,
+        config.collision.sizes.spike,
         0,
         Math.PI * 2
       );

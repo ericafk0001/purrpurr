@@ -4,17 +4,23 @@ import {
   players,
   myPlayer,
   walls,
+  spikes,
   socket,
   setPlayers,
   setMyPlayer,
   setTrees,
   setStones,
   setWalls,
+  setSpikes,
 } from "../utils/constants.js";
 import { clampWithEasing } from "../utils/helpers.js";
 import { addFloatingNumber } from "../rendering/effects.js";
 import { handleInventorySelection } from "../player/inventory.js";
-import { setLastServerSync, setNeedsPositionReconciliation, setCorrectedPosition } from "../player/player.js";
+import {
+  setLastServerSync,
+  setNeedsPositionReconciliation,
+  setCorrectedPosition,
+} from "../player/player.js";
 import { wallShakes } from "../rendering/drawWorld.js";
 import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
@@ -22,7 +28,7 @@ import { updateCamera } from "../core/camera.js";
 
 /**
  * Sends the local player's current position and rotation to the server.
- * 
+ *
  * Emits a "playerMovement" event with the player's coordinates and rotation for synchronization in the multiplayer game.
  */
 export function sendPlayerMovement() {
@@ -118,6 +124,7 @@ socket.on("initGame", (gameState) => {
   setTrees(gameState.trees || []);
   setStones(gameState.stones || []);
   setWalls(gameState.walls || []); // Add this line
+  setSpikes(gameState.spikes || []); // Add spikes to initial game state
   setMyPlayer(players[socket.id]);
 });
 
@@ -243,7 +250,7 @@ socket.on("positionCorrection", (correctPos) => {
   if (myPlayer) {
     // Set flag to reconcile position on next frame
     setNeedsPositionReconciliation(true);
-    setCorrectedPosition(correctPos)
+    setCorrectedPosition(correctPos);
   }
 });
 
@@ -287,5 +294,35 @@ socket.on("playerHit", (data) => {
       players[data.targetId].y - 40,
       data.damage
     );
+  }
+});
+
+// Add spike socket handlers
+socket.on("spikePlaced", (spikeData) => {
+  spikes.push(spikeData);
+
+  // Switch back to hammer only if this was our spike
+  if (spikeData.playerId === socket.id) {
+    handleInventorySelection(0);
+  }
+});
+
+socket.on("spikeDamaged", (data) => {
+  const spike = spikes.find((s) => s.x === data.x && s.y === data.y);
+  if (spike) {
+    spike.health = data.health;
+    // Add shake animation data (reusing wallShakes for spikes too)
+    wallShakes.set(`spike_${spike.x},${spike.y}`, {
+      startTime: performance.now(),
+      duration: 200, // Shake duration in ms
+      magnitude: 3, // Shake intensity
+    });
+  }
+});
+
+socket.on("spikeDestroyed", (data) => {
+  const spikeIndex = spikes.findIndex((s) => s.x === data.x && s.y === data.y);
+  if (spikeIndex !== -1) {
+    spikes.splice(spikeIndex, 1);
   }
 });

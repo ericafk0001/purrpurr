@@ -26,6 +26,7 @@ export function loadAssets() {
     hammer: items.hammer.asset,
     apple: items.apple.asset,
     wall: items.wall.asset, // Add this line to load wall asset
+    spike: items.spike.asset, // Add spike asset loading
   };
   Object.entries(itemAssets).forEach(([key, path]) => {
     const img = new Image();

@@ -8,6 +8,7 @@ export function processAttack(
   attackerId,
   players,
   walls,
+  spikes,
   gameConfig,
   io,
   damagePlayer
@@ -50,6 +51,34 @@ export function processAttack(
             x: wall.x,
             y: wall.y,
             health: wall.health,
+          });
+        }
+      }
+    }
+  }
+
+  // Process spike damage
+  for (let index = spikes.length - 1; index >= 0; index--) {
+    const spike = spikes[index];
+    const dx = spike.x - attacker.x;
+    const dy = spike.y - attacker.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= attackRange + gameConfig.collision.sizes.spike) {
+      const angleToSpike = Math.atan2(dy, dx);
+      const angleDiff = Math.abs(normalizeAngle(angleToSpike - playerAngle));
+
+      if (angleDiff <= arcAngle / 2) {
+        spike.health -= weapon.damage || 15;
+
+        if (spike.health <= 0) {
+          spikes.splice(index, 1);
+          io.emit("spikeDestroyed", { x: spike.x, y: spike.y });
+        } else {
+          io.emit("spikeDamaged", {
+            x: spike.x,
+            y: spike.y,
+            health: spike.health,
           });
         }
       }

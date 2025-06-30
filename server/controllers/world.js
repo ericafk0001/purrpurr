@@ -14,9 +14,9 @@ export function generateTrees(trees, gameConfig) {
 
   /**
    * Determines if a given (x, y) position is valid for placing a tree based on grid boundaries and local density constraints.
-   * 
+   *
    * The position is considered valid if it falls within the grid and the total number of trees in the surrounding 3x3 grid cells is less than the maximum allowed per cell as specified in the configuration.
-   * 
+   *
    * @param {number} x - The x-coordinate of the candidate position.
    * @param {number} y - The y-coordinate of the candidate position.
    * @return {boolean} True if the position is valid for tree placement; otherwise, false.
@@ -130,12 +130,7 @@ export function generateStones(stones, gameConfig) {
       const cellY = Math.floor(y / cellSize);
 
       if (
-        isValidPosition(
-          cellX,
-          cellY,
-          grid,
-          gameConfig.stones.maxStonePerCell
-        )
+        isValidPosition(cellX, cellY, grid, gameConfig.stones.maxStonePerCell)
       ) {
         stones.push({
           x,

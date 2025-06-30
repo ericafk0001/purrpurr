@@ -1,5 +1,6 @@
 // Player management, health, and inventory functions
 import { findSafeSpawnPoint } from "../utils/collision.js";
+import { gameItems } from "../../src/config/items.js";
 
 /**
  * Broadcasts the specified player's current health and related state to all connected clients.
@@ -21,7 +22,7 @@ export function broadcastHealthUpdate(playerId, players, io, gameConfig) {
 
 /**
  * Broadcasts the specified player's inventory to all connected clients.
- * 
+ *
  * Emits a "playerInventoryUpdate" event containing the player's ID and current inventory.
  * Does nothing if the player does not exist.
  */
@@ -58,11 +59,18 @@ export function damagePlayer(
   const player = players[playerId];
   if (!player) return false;
 
-  // Get attacker's active weapon
-  const attackerWeapon =
-    attacker?.inventory?.slots[attacker.inventory.activeSlot];
-  const weaponKnockback =
-    attackerWeapon?.knockback || gameConfig.player.knockback;
+  // Determine knockback settings based on attacker type
+  let weaponKnockback;
+
+  if (attacker && attacker.id === "spike") {
+    // If attacker is a spike, use spike knockback settings from items
+    weaponKnockback = gameItems.spike.knockback;
+  } else {
+    // For other attackers, get their active weapon
+    const attackerWeapon =
+      attacker?.inventory?.slots[attacker.inventory.activeSlot];
+    weaponKnockback = attackerWeapon?.knockback || gameConfig.player.knockback;
+  }
 
   const oldHealth = player.health;
   player.health = Math.max(0, player.health - amount);

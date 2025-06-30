@@ -58,4 +58,27 @@ export const gameItems = {
       preserveRatio: true, // This will maintain aspect ratio when rendering
     },
   },
+  spike: {
+    id: "spike",
+    name: "Iron Spikes",
+    type: "placeable",
+    maxHealth: 180, // Spikes have less health than walls
+    damage: 25, // Damage spikes deal to players who touch them
+    asset: "./assets/spike.png", // Use proper spike asset
+    slot: 3, // fourth slot
+    renderOptions: {
+      scale: 1.6, // Same scale as walls
+      offsetX: -0.8, // Same as walls
+      offsetY: 0.3, // Same as walls
+      rotationOffset: 0, // Rotate so spike points forward when held
+      width: 480, // Same as walls
+      height: 417, // Same as walls
+      preserveRatio: true,
+    },
+    knockback: {
+      force: 340, // Base knockback force
+      duration: 210, // How long knockback lasts in ms
+      decay: 1, // How quickly knockback velocity decays (per frame)
+    },
+  },
 };

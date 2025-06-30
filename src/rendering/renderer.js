@@ -4,6 +4,7 @@ import {
   drawTree,
   drawStone,
   drawWall,
+  drawSpike,
   drawWorldBorder,
   isInViewport,
 } from "./drawWorld.js";
@@ -19,6 +20,7 @@ import {
   config,
   players,
   walls,
+  spikes,
   stones,
   trees,
   camera,
@@ -41,10 +43,13 @@ export function drawPlayers(interpolation = 1) {
 
   // Define draw layers with fixed order (no Y-sorting)
   const drawLayers = [
-    // Layer 1 - Walls (bottom)
+    // Layer 1 - Walls and Spikes (bottom)
     ...walls
       .filter((wall) => isInViewport(wall))
       .map((wall) => ({ ...wall, type: "wall" })),
+    ...spikes
+      .filter((spike) => isInViewport(spike))
+      .map((spike) => ({ ...spike, type: "spike" })),
 
     // Layer 2 - Players and Stones (middle)
     ...Object.entries(players).map(([id, player]) => {
@@ -90,6 +95,9 @@ export function drawPlayers(interpolation = 1) {
     switch (obj.type) {
       case "wall":
         drawWall(obj);
+        break;
+      case "spike":
+        drawSpike(obj);
         break;
       case "player":
         drawPlayer(obj);

@@ -23,6 +23,7 @@ export let myPlayer = null;
 export let trees = [];
 export let stones = [];
 export let walls = [];
+export let spikes = [];
 
 // Input state
 export const keys = { w: false, a: false, s: false, d: false };
@@ -44,6 +45,8 @@ export const assets = {
     player: false,
     tree: false,
     stone: false,
+    wall: false,
+    spike: false,
   },
 };
 
@@ -85,4 +88,12 @@ export function setStones(newStones) {
  */
 export function setWalls(newWalls) {
   walls = newWalls;
+}
+
+/**
+ * Updates the current array of spike objects in the game state.
+ * @param {Array} newSpikes - The new array of spike objects to set.
+ */
+export function setSpikes(newSpikes) {
+  spikes = newSpikes;
 }

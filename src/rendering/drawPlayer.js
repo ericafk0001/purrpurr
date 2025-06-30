@@ -4,7 +4,7 @@ import { drawChatBubble } from "../ui/chat.js";
 
 /**
  * Renders the player character at its current or interpolated position, applying rotation and attack swing animation, and draws the equipped item and chat bubble if present.
- * 
+ *
  * The player is drawn relative to the camera, with attack animations smoothly rotating the sprite. If the player has an equipped item, it is rendered with appropriate positioning and scaling. A chat bubble is displayed if the player has active chat content.
  */
 export function drawPlayer(player) {
@@ -64,7 +64,7 @@ export function drawPlayer(player) {
 }
 /**
  * Draws the player's equipped item on the canvas with appropriate position, scale, and rotation.
- * 
+ *
  * Uses item-specific rendering parameters to ensure correct placement and orientation relative to the player.
  */
 export function drawEquippedItem(item, player) {
@@ -139,6 +139,11 @@ export function getItemRenderInfo(item, player) {
   switch (item.id) {
     case "hammer":
       // No additional rotation for hammer since the entire body rotates now
+      break;
+
+    case "spike":
+      // Make spike held orientation match placement orientation
+      info.rotation = renderOpts.rotationOffset || 0;
       break;
 
     // Add more cases for future items here

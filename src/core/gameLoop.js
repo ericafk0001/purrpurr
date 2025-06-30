@@ -107,8 +107,11 @@ export function updateGameLogic(deltaTime) {
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
         // Get cooldown from the currently equipped weapon
-        const activeItem = myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
-        const weaponCooldown = activeItem ? (items[activeItem.id]?.cooldown || 800) : 800;
+        const activeItem =
+          myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
+        const weaponCooldown = activeItem
+          ? items[activeItem.id]?.cooldown || 800
+          : 800;
         const cooldownRemaining = weaponCooldown - attackDuration;
         setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
@@ -123,7 +126,9 @@ export function updateGameLogic(deltaTime) {
     const elapsed = animTime - player.attackStartTime;
     // Get attack duration from player's weapon or use default
     const activeItem = player.inventory?.slots?.[player.inventory.activeSlot];
-    const attackDuration = activeItem ? (items[activeItem.id]?.useTime || 400) : 400;
+    const attackDuration = activeItem
+      ? items[activeItem.id]?.useTime || 400
+      : 400;
 
     // Update animation progress
     if (elapsed <= attackDuration) {

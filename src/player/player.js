@@ -8,6 +8,7 @@ import {
   resolvePlayerCollisions,
   resolveCollisionPenetration,
   resolveWallCollisions,
+  resolveSpikeCollisions,
 } from "../physics/collision.js";
 import { sendPlayerMovement } from "../network/socketHandlers.js";
 
@@ -107,12 +108,13 @@ export function updatePosition(deltaTime) {
   resolvePlayerCollisions();
   resolveCollisionPenetration();
   resolveWallCollisions(); // Add wall collision resolution
+  resolveSpikeCollisions(); // Add spike collision resolution
 
   sendPlayerMovement();
 }
 /**
  * Updates the player's rotation to face the mouse cursor based on the target camera position.
- * 
+ *
  * Only applies on non-mobile devices. Calculates the angle between the player's position and the mouse's world position, then updates the player's rotation accordingly. Sends the updated movement data to the server.
  */
 export function updateRotation() {
