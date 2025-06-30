@@ -1,7 +1,7 @@
 /**
- * Processes a melee attack for a player, applying damage to walls and other players within a defined arc and range.
+ * Executes a melee attack for a player using a hammer, applying damage to walls, spikes, and other players within a specified arc and range.
  *
- * Only executes if the attacker is valid and equipped with a "hammer" weapon. Walls and players within the attack arc and range receive damage; destroyed walls and hit players trigger corresponding events via the socket.
+ * Validates the attacker and weapon before processing. Damages and potentially destroys walls and spikes within the attack arc, emitting corresponding events. Damages other players if any part of their collision area is within the arc, emitting a hit event for each affected player.
  */
 
 export function processAttack(

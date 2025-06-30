@@ -26,12 +26,12 @@ export function checkCollision(circle1, circle2) {
   return distance < circle1.radius + circle2.radius;
 }
 /**
- * Adjusts the player's intended movement vector to prevent overlapping with static obstacles.
+ * Modifies the player's movement vector to prevent overlapping with static obstacles such as trees, stones, walls, and spikes.
  *
- * Checks the proposed movement against all trees, stones, and walls, and modifies the movement vector so the player slides along obstacles instead of penetrating them.
+ * Checks the proposed movement and adjusts it so the player slides along obstacles rather than moving through them.
  * @param {number} dx - Proposed movement along the x-axis.
  * @param {number} dy - Proposed movement along the y-axis.
- * @return {{dx: number, dy: number}} The adjusted movement vector that avoids obstacle penetration.
+ * @return {{dx: number, dy: number}} The adjusted movement vector that avoids static obstacle penetration.
  */
 export function handleCollisions(dx, dy) {
   if (!myPlayer) return { dx, dy };
@@ -221,9 +221,9 @@ export function resolveCollisionPenetration() {
   }
 }
 /**
- * Resolves collisions between the local player and walls by applying a push force to move the player out of overlapping walls.
+ * Resolves overlaps between the local player and walls by pushing the player out of any intersecting wall.
  *
- * If the player is deeply embedded in a wall, a small random jitter is added to help prevent the player from getting stuck.
+ * Applies a damped push force to separate the player from overlapping walls, and adds random jitter if the player is deeply embedded to help prevent sticking.
  */
 export function resolveWallCollisions() {
   if (!myPlayer) return;
@@ -266,9 +266,9 @@ export function resolveWallCollisions() {
 }
 
 /**
- * Resolves collisions between the local player and spikes by applying a push force to move the player out of overlapping spikes.
+ * Moves the local player out of overlapping spikes by applying a damped push force.
  *
- * If the player is deeply embedded in a spike, a small random jitter is added to help prevent the player from getting stuck.
+ * If the player is deeply embedded in a spike, adds a small random jitter to help prevent sticking.
  */
 export function resolveSpikeCollisions() {
   if (!myPlayer) return;

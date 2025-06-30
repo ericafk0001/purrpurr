@@ -16,9 +16,9 @@ import { isInViewport } from "./drawWorld.js";
 export const floatingNumbers = [];
 
 /**
- * Renders and updates floating number effects, such as damage or healing indicators, on the game canvas.
+ * Updates and renders floating number effects (such as damage or healing indicators) on the game canvas.
  *
- * Removes expired floating numbers, updates their positions and transparency, and draws them with color coding based on type.
+ * Removes expired floating numbers, updates their positions and fading transparency, and draws them at their current screen positions with color coding based on effect type.
  */
 export function drawFloatingNumbers() {
   const now = performance.now();
@@ -89,9 +89,9 @@ export function addFloatingNumber(x, y, value, type = "damage") {
 }
 
 /**
- * Renders collision boundaries for players, trees, stones, and walls, and visualizes weapon hitboxes for debugging.
+ * Renders collision circles for all relevant game entities within the viewport and visualizes weapon hitboxes for debugging.
  *
- * Draws collision circles for all relevant game entities within the viewport using configured sizes and colors. If weapon debug mode is enabled, also displays the attack range and angle for players wielding a hammer, including a highlight when attacking.
+ * Draws collision boundaries for players, trees, stones, walls, and spikes using configured sizes and colors. If weapon debug mode is enabled, displays the attack arc for players wielding a hammer, including a highlight when attacking.
  */
 export function drawCollisionCircles() {
   ctx.strokeStyle = config.collision.debugColor;

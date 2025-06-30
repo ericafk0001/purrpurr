@@ -76,10 +76,9 @@ export function gameLoop(timestamp) {
 }
 
 /**
- * Updates game logic for a fixed timestep, including player attack animations and movement.
+ * Advances the game state by a fixed timestep, updating player attack animations, auto-attack scheduling, movement, and rotation.
  *
- * Handles attack animation progress and state transitions for the local player and all other players.
- * Manages auto-attack queuing if enabled and updates player positions and rotations using the provided fixed timestep.
+ * Updates the local player's attack animation progress and handles state transitions, including auto-attack queuing based on weapon cooldowns. Iterates through all players to update their attack animation states. Applies movement and rotation updates for all players using the provided timestep.
  * @param {number} deltaTime - The fixed timestep duration in milliseconds for this update cycle.
  */
 export function updateGameLogic(deltaTime) {

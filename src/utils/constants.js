@@ -83,16 +83,16 @@ export function setStones(newStones) {
 }
 
 /**
- * Updates the current array of wall objects in the game state.
- * @param {Array} newWalls - The new array of wall objects to set.
+ * Replaces the current array of wall objects in the game state.
+ * @param {Array} newWalls - The new array of wall objects.
  */
 export function setWalls(newWalls) {
   walls = newWalls;
 }
 
 /**
- * Updates the current array of spike objects in the game state.
- * @param {Array} newSpikes - The new array of spike objects to set.
+ * Replaces the global array of spike objects with a new array.
+ * @param {Array} newSpikes - The updated list of spike objects for the game state.
  */
 export function setSpikes(newSpikes) {
   spikes = newSpikes;

@@ -23,9 +23,9 @@ export function getVirtualKeys() {
 }
 
 /**
- * Updates virtual movement key states based on the current position of the mobile joystick.
+ * Updates the virtual movement key states based on the current position of the mobile joystick.
  *
- * Calculates joystick displacement to determine 8-directional movement and sets the corresponding virtual keys. If auto-facing is enabled and a player exists, updates the player's rotation to match the joystick direction and synchronizes this with the server. Resets all movement keys if the joystick is inactive or within the deadzone.
+ * Determines the intended movement direction by analyzing joystick displacement and sets the corresponding virtual movement keys for 8-directional control. If auto-facing is enabled and a player instance exists, updates the player's rotation to align with the joystick direction and synchronizes this with the server. Resets all movement keys if the joystick is inactive or within the deadzone.
  */
 function updateVirtualMovement() {
   if (!touchControls.joystick.active) {

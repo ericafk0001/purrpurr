@@ -37,14 +37,14 @@ export function broadcastInventoryUpdate(playerId, players, io) {
 }
 
 /**
- * Applies damage to a player, updates their health, and applies knockback if attacked by another player.
+ * Damages a player by reducing their health and applies knockback if attacked, broadcasting the updated health to all clients.
  *
- * Reduces the specified player's health by the given amount, applies knockback based on the attacker's weapon if present, and broadcasts the updated health to all clients. If the player's health drops to zero from a positive value, triggers the death and respawn process.
+ * If the attacker is a spike, uses spike-specific knockback settings; otherwise, uses the attacker's active weapon or default knockback. Triggers the death and respawn process if the player's health drops to zero from a positive value.
  *
  * @param {string} playerId - The ID of the player receiving damage.
  * @param {number} amount - The amount of damage to apply.
- * @param {object} attacker - The attacking player object, or null if not applicable.
- * @return {boolean} Returns true if damage was applied; false if the player does not exist.
+ * @param {object|null} attacker - The attacking player object or null if not applicable.
+ * @return {boolean} True if damage was applied; false if the player does not exist.
  */
 export function damagePlayer(
   playerId,

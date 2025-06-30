@@ -12,9 +12,9 @@ import {
 export const wallShakes = new Map(); // Track wall shake animations
 
 /**
- * Draws a tree at its world position on the canvas, applying rotation and scaling based on configuration.
+ * Renders a tree object at its world coordinates on the canvas, applying rotation and scaling according to configuration.
  *
- * The tree is rendered only if the tree asset is loaded. The position is adjusted relative to the camera, and the tree is drawn with the configured radius.
+ * The tree is drawn only if its asset is loaded. The image is centered at the tree's position relative to the camera and scaled to the configured radius.
  */
 export function drawTree(tree) {
   if (assets.tree && assets.loadStatus.tree) {
@@ -32,9 +32,9 @@ export function drawTree(tree) {
   }
 }
 /**
- * Draws a stone at its world position on the canvas, applying rotation and scaling based on configuration.
+ * Renders a stone object on the canvas at its world coordinates, applying rotation and scaling according to configuration.
  *
- * The stone is rendered only if the stone asset is loaded. The position is adjusted relative to the camera, and the stone is drawn with the configured radius.
+ * The stone is drawn only if its asset is loaded. The image is centered at the stone's position relative to the camera and scaled to the configured radius.
  */
 export function drawStone(stone) {
   if (assets.stone && assets.loadStatus.stone) {
@@ -112,11 +112,11 @@ export function drawWorldBorder() {
 }
 
 /**
- * Determines whether an object is within the visible area of the canvas viewport.
+ * Checks if a world object is visible within the current camera viewport.
  *
- * Uses the object's `radius` property if available, or a default size, to calculate its bounding box for visibility checks.
- * @param {Object} object - The world object with `x`, `y`, and optional `radius` properties.
- * @return {boolean} True if any part of the object is visible within the current camera viewport; otherwise, false.
+ * Uses the object's `radius` property, or a default size if not present, to determine if any part of the object overlaps the visible canvas area.
+ * @param {Object} object - The object with `x`, `y`, and optional `radius` properties representing its position and size.
+ * @return {boolean} True if any portion of the object is within the viewport; otherwise, false.
  */
 export function isInViewport(object) {
   const radius = object.radius || Math.max(30, config.collision.sizes.player);
@@ -129,10 +129,10 @@ export function isInViewport(object) {
 }
 
 /**
- * Draws a spike at its world position with optional rotation, shake animation, and damage transparency effects.
+ * Renders a spike object on the canvas at its world position, applying rotation, shake animation, and damage transparency effects.
  *
- * The spike is rendered using the spike asset, scaled according to configuration. If a shake animation is active for the spike, a decaying random offset is applied. The spike's transparency reflects its current health, becoming more transparent as it takes damage.
- * @param {Object} spike - The spike object containing position, rotation, and health properties.
+ * The spike is drawn using the spike asset, scaled according to configuration. If a shake animation is active for the spike, a decaying random offset is applied to its position. The spike becomes more transparent as its health decreases.
+ * @param {Object} spike - The spike object with position, rotation, and health properties.
  */
 export function drawSpike(spike) {
   if (assets.spike) {
