@@ -128,16 +128,16 @@ export function findValidSpawnPosition(gameConfig, walls) {
 }
 
 /**
- * Determines whether a wall can be placed at the specified position without violating minimum distance requirements from existing walls, trees, or stones.
- * 
- * The function checks that the proposed wall position is not too close to any existing wall (using a minimum distance threshold) and does not overlap with trees or stones, accounting for their collision sizes and an additional placement buffer.
- * 
- * @param {number} x - The x-coordinate of the proposed wall position.
- * @param {number} y - The y-coordinate of the proposed wall position.
- * @param {Array} walls - Array of existing wall objects with position data.
- * @param {Array} trees - Array of tree objects with position data.
- * @param {Array} stones - Array of stone objects with position data.
- * @param {Object} gameConfig - Game configuration object containing collision sizes and placement rules.
+ * Checks if a wall can be placed at the given coordinates without being too close to existing walls, trees, or stones.
+ *
+ * Ensures the proposed wall position meets minimum distance requirements from other walls and does not overlap with trees or stones, factoring in collision sizes and a placement buffer.
+ *
+ * @param {number} x - The x-coordinate for the proposed wall.
+ * @param {number} y - The y-coordinate for the proposed wall.
+ * @param {Array} walls - Existing wall objects with position data.
+ * @param {Array} trees - Tree objects with position data.
+ * @param {Array} stones - Stone objects with position data.
+ * @param {Object} gameConfig - Game configuration with collision sizes and placement rules.
  * @return {boolean} True if the wall placement is valid; otherwise, false.
  */
 export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
@@ -171,6 +171,77 @@ export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const minAllowedDistance =
       wallRadius + obstacle.radius + gameConfig.walls.placementBuffer;
+
+    if (distance < minAllowedDistance) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Checks if a spike can be placed at the given coordinates without being too close to existing spikes, walls, trees, or stones.
+ *
+ * Ensures the proposed spike position meets minimum distance requirements from other spikes and walls, and does not overlap with trees or stones, factoring in collision radii and a placement buffer.
+ *
+ * @param {number} x - The x-coordinate for the spike placement.
+ * @param {number} y - The y-coordinate for the spike placement.
+ * @param {Array} spikes - Existing spikes with position data.
+ * @param {Array} walls - Existing walls with position data.
+ * @param {Array} trees - Existing trees with position data.
+ * @param {Array} stones - Existing stones with position data.
+ * @param {Object} gameConfig - Game configuration with collision sizes and placement rules.
+ * @return {boolean} True if the spike placement is valid; otherwise, false.
+ */
+export function isValidSpikePosition(
+  x,
+  y,
+  spikes,
+  walls,
+  trees,
+  stones,
+  gameConfig
+) {
+  const spikeRadius = gameConfig.collision.sizes.spike;
+  const minDistanceFromSpikes = gameConfig.spikes.minDistance;
+  const minDistanceFromWalls = gameConfig.walls.minDistance; // Reuse wall distance for spike-wall separation
+
+  // Check distance from other spikes
+  for (const spike of spikes) {
+    const dx = x - spike.x;
+    const dy = y - spike.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance < minDistanceFromSpikes) return false;
+  }
+
+  // Check distance from walls
+  for (const wall of walls) {
+    const dx = x - wall.x;
+    const dy = y - wall.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance < minDistanceFromWalls) return false;
+  }
+
+  // Check distance from trees and stones with exact collision sizes
+  const obstacles = [
+    ...trees.map((tree) => ({
+      ...tree,
+      radius: gameConfig.collision.sizes.tree,
+    })),
+    ...stones.map((stone) => ({
+      ...stone,
+      radius: gameConfig.collision.sizes.stone,
+    })),
+  ];
+
+  // Check each obstacle
+  for (const obstacle of obstacles) {
+    const dx = x - obstacle.x;
+    const dy = y - obstacle.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const minAllowedDistance =
+      spikeRadius + obstacle.radius + gameConfig.spikes.placementBuffer;
 
     if (distance < minAllowedDistance) {
       return false;

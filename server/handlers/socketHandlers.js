@@ -1,7 +1,7 @@
 /**
- * Registers socket.io event handlers to manage multiplayer game interactions, player lifecycle, and world state synchronization.
+ * Registers socket.io event handlers to manage multiplayer game state, player actions, and world object interactions.
  *
- * Sets up handlers for player connection, movement, chat, healing, inventory management, attacking, item usage, wall placement, teleportation, and disconnection. Ensures consistent game state across all clients and enforces game rules such as cooldowns, valid actions, and world boundaries.
+ * Sets up listeners for player connection, movement, chat, healing, inventory management, attacking, item usage, wall and spike placement, teleportation, and disconnection. Synchronizes game state across all clients, enforces game rules such as cooldowns and world boundaries, and manages player interactions with world objects including spikes and walls.
  */
 
 export function setupSocketHandlers(
@@ -10,6 +10,7 @@ export function setupSocketHandlers(
   trees,
   stones,
   walls,
+  spikes,
   gameConfig,
   gameItems,
   gameFunctions
@@ -20,6 +21,7 @@ export function setupSocketHandlers(
     healPlayer,
     processAttack,
     isValidWallPlacement,
+    isValidSpikePosition,
     findValidSpawnPosition,
   } = gameFunctions;
 
@@ -48,6 +50,7 @@ export function setupSocketHandlers(
       { ...gameItems.hammer, slot: 0 },
       { ...gameItems.apple, slot: 1 },
       { ...gameItems.wall, slot: 2 }, // Add wall to starting inventory
+      { ...gameItems.spike, slot: 3 }, // Add spikes to starting inventory
     ];
 
     startingItems.forEach((item) => {
@@ -71,6 +74,7 @@ export function setupSocketHandlers(
       trees,
       stones,
       walls, // Add this line
+      spikes, // Add spikes to initial game state
     });
 
     // Notify other players about new player with health info
@@ -117,6 +121,55 @@ export function setupSocketHandlers(
           // Validate position is within world bounds
           player.x = Math.max(0, Math.min(gameConfig.worldWidth, player.x));
           player.y = Math.max(0, Math.min(gameConfig.worldHeight, player.y));
+
+          // Check for spike damage after position update
+          const now = Date.now();
+          spikes.forEach((spike) => {
+            // Skip damage if player is the spike owner
+            if (spike.playerId === socket.id) return;
+
+            const dx = player.x - spike.x;
+            const dy = player.y - spike.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            // Add extra damage radius beyond collision circle
+            const damageDistance =
+              gameConfig.collision.sizes.player +
+              gameConfig.collision.sizes.spike +
+              gameConfig.spikes.damageRadius;
+
+            // Check if player is within damage area of the spike
+            if (distance < damageDistance) {
+              // Only damage if enough time has passed since last spike damage for this player
+              // Initialize spike damage tracking if needed
+              if (!player.spikeDamageTimes) {
+                player.spikeDamageTimes = {};
+              }
+              
+              if (
+                !player.spikeDamageTimes[spike.id] ||
+                now - player.spikeDamageTimes[spike.id] >=
+                  gameConfig.spikes.damageInterval
+              ) {
+                player.spikeDamageTimes[spike.id] = now;
+
+                // Damage the player
+                gameFunctions.damagePlayer(
+                  socket.id,
+                  gameItems.spike.damage,
+                  spike
+                );
+
+                // Emit playerHit event to trigger floating damage numbers
+                io.emit("playerHit", {
+                  attackerId: "spike", // Indicate spike as attacker
+                  targetId: socket.id,
+                  damage: gameItems.spike.damage,
+                  x: spike.x, // Include spike position for effect positioning
+                  y: spike.y,
+                });
+              }
+            }
+          });
 
           // Broadcast position update with health info and velocity
           socket.broadcast.emit("playerMoved", {
@@ -226,7 +279,7 @@ export function setupSocketHandlers(
       });
 
       // Process attack immediately instead of waiting
-      processAttack(socket.id);
+      processAttack(socket.id, players, walls, spikes, gameConfig);
 
       // End attack state after animation
       setTimeout(() => {
@@ -307,6 +360,56 @@ export function setupSocketHandlers(
 
       // Broadcast wall placement with health
       io.emit("wallPlaced", wall);
+
+      // Switch back to hammer
+      player.inventory.activeSlot = 0;
+      player.inventory.selectedItem = player.inventory.slots[0];
+
+      // Broadcast inventory update
+      broadcastInventoryUpdate(socket.id);
+    });
+
+    // Add spike placement handler
+    socket.on("placeSpike", (position) => {
+      const player = players[socket.id];
+      if (!player || player.isDead) return;
+
+      // Validate position is within world bounds
+      if (
+        position.x < 0 ||
+        position.x > gameConfig.worldWidth ||
+        position.y < 0 ||
+        position.y > gameConfig.worldHeight
+      )
+        return;
+
+      // Check if position is valid
+      if (!isValidSpikePosition(position.x, position.y)) return;
+
+      // Find spike in inventory
+      const spikeSlot = player.inventory.slots.findIndex(
+        (item) => item?.id === "spike"
+      );
+      if (spikeSlot === -1) return;
+
+      // Add spike to world with health
+      const spike = {
+        id: `spike-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: "spike",
+        x: position.x,
+        y: position.y,
+        radius: gameConfig.collision.sizes.spike,
+        rotation: position.rotation || 0,
+        playerId: socket.id,
+        health: gameItems.spike.maxHealth, // Add initial health
+        damage: gameItems.spike.damage, // Add damage property
+        lastDamageTime: 0, // Track when spike last damaged a player
+      };
+
+      spikes.push(spike);
+
+      // Broadcast spike placement with health
+      io.emit("spikePlaced", spike);
 
       // Switch back to hammer
       player.inventory.activeSlot = 0;

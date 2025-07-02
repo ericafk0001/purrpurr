@@ -1,7 +1,7 @@
 /**
- * Populates the provided array with procedurally generated tree objects positioned within the game world.
+ * Fills the given array with tree objects distributed throughout the game world according to spatial and density constraints.
  *
- * Trees are placed using a spatial grid to enforce minimum distance constraints and limit the number of trees per cell and its neighbors, ensuring realistic spacing and density. Each tree is assigned a random position, fixed radius, and random rotation.
+ * Each tree is assigned a random position, fixed radius, and random rotation, with placement restricted to ensure minimum distances and a maximum number of trees per grid cell and its neighbors.
  */
 
 export function generateTrees(trees, gameConfig) {
@@ -14,9 +14,9 @@ export function generateTrees(trees, gameConfig) {
 
   /**
    * Determines if a given (x, y) position is valid for placing a tree based on grid boundaries and local density constraints.
-   * 
+   *
    * The position is considered valid if it falls within the grid and the total number of trees in the surrounding 3x3 grid cells is less than the maximum allowed per cell as specified in the configuration.
-   * 
+   *
    * @param {number} x - The x-coordinate of the candidate position.
    * @param {number} y - The y-coordinate of the candidate position.
    * @return {boolean} True if the position is valid for tree placement; otherwise, false.
@@ -73,12 +73,9 @@ export function generateTrees(trees, gameConfig) {
 }
 
 /**
- * Populates the provided array with stone objects distributed throughout the game world according to configuration constraints.
+ * Fills the given array with stone objects randomly distributed across the game world, enforcing minimum spacing and density constraints.
  *
- * Stones are placed at random positions, ensuring a minimum distance between them and limiting the number of stones per grid cell and its neighbors. The total number of stones is determined by the world area and the configured stone density.
- *
- * @param {Array} stones - The array to be filled with generated stone objects.
- * @param {Object} gameConfig - Configuration object specifying world dimensions and stone placement parameters.
+ * Stones are placed at random positions, ensuring that no grid cell and its immediate neighbors exceed the configured maximum number of stones. The total number of stones is calculated based on the world area and stone density settings.
  */
 export function generateStones(stones, gameConfig) {
   const cellSize = gameConfig.stones.minDistance;
@@ -130,12 +127,7 @@ export function generateStones(stones, gameConfig) {
       const cellY = Math.floor(y / cellSize);
 
       if (
-        isValidPosition(
-          cellX,
-          cellY,
-          grid,
-          gameConfig.stones.maxStonePerCell
-        )
+        isValidPosition(cellX, cellY, grid, gameConfig.stones.maxStonePerCell)
       ) {
         stones.push({
           x,

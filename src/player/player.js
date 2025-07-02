@@ -8,6 +8,7 @@ import {
   resolvePlayerCollisions,
   resolveCollisionPenetration,
   resolveWallCollisions,
+  resolveSpikeCollisions,
 } from "../physics/collision.js";
 import { sendPlayerMovement } from "../network/socketHandlers.js";
 
@@ -34,11 +35,11 @@ export let correctedPosition = null;
 
 // Player functions
 /**
- * Updates the player's position based on input, velocity, and collision handling.
+ * Updates the player's position each frame based on input, velocity, and collision resolution.
  *
- * Applies server reconciliation corrections if needed, integrates velocity with decay for smooth movement, processes input from keyboard or virtual keys, normalizes movement, and resolves collisions. Sends updated movement data to the server after applying all adjustments.
+ * Applies server reconciliation if required, processes input for movement, integrates velocity with decay, and resolves collisions with players, walls, and spikes. Ensures the player's position remains within world bounds and sends the updated movement state to the server.
  *
- * @param {number} deltaTime - The elapsed time since the last update, used to ensure frame-rate independent movement.
+ * @param {number} deltaTime - Time elapsed since the last update, used for frame-rate independent movement.
  */
 export function updatePosition(deltaTime) {
   if (!myPlayer) return;
@@ -107,13 +108,14 @@ export function updatePosition(deltaTime) {
   resolvePlayerCollisions();
   resolveCollisionPenetration();
   resolveWallCollisions(); // Add wall collision resolution
+  resolveSpikeCollisions(); // Add spike collision resolution
 
   sendPlayerMovement();
 }
 /**
- * Updates the player's rotation to face the mouse cursor based on the target camera position.
- * 
- * Only applies on non-mobile devices. Calculates the angle between the player's position and the mouse's world position, then updates the player's rotation accordingly. Sends the updated movement data to the server.
+ * Rotates the player to face the mouse cursor in world space.
+ *
+ * Only applies on non-mobile devices. Calculates the angle between the player's position and the mouse's world position using the target camera, then updates the player's rotation. Sends the updated movement data to the server.
  */
 export function updateRotation() {
   // Only update rotation based on mouse for desktop devices

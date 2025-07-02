@@ -6,6 +6,7 @@ import {
   trees,
   stones,
   walls,
+  spikes,
   socket,
 } from "../utils/constants.js";
 import { normalize, dot, clampWithEasing } from "../utils/helpers.js";
@@ -25,12 +26,12 @@ export function checkCollision(circle1, circle2) {
   return distance < circle1.radius + circle2.radius;
 }
 /**
- * Adjusts the player's intended movement vector to prevent overlapping with static obstacles.
+ * Modifies the player's movement vector to prevent overlapping with static obstacles such as trees, stones, walls, and spikes.
  *
- * Checks the proposed movement against all trees, stones, and walls, and modifies the movement vector so the player slides along obstacles instead of penetrating them.
+ * Checks the proposed movement and adjusts it so the player slides along obstacles rather than moving through them.
  * @param {number} dx - Proposed movement along the x-axis.
  * @param {number} dy - Proposed movement along the y-axis.
- * @return {{dx: number, dy: number}} The adjusted movement vector that avoids obstacle penetration.
+ * @return {{dx: number, dy: number}} The adjusted movement vector that avoids static obstacle penetration.
  */
 export function handleCollisions(dx, dy) {
   if (!myPlayer) return { dx, dy };
@@ -59,6 +60,11 @@ export function handleCollisions(dx, dy) {
       x: wall.x,
       y: wall.y,
       radius: config.collision.sizes.wall,
+    })),
+    ...spikes.map((spike) => ({
+      x: spike.x,
+      y: spike.y,
+      radius: config.collision.sizes.spike,
     })),
   ];
 
@@ -214,12 +220,8 @@ export function resolveCollisionPenetration() {
     );
   }
 }
-/**
- * Resolves collisions between the local player and walls by applying a push force to move the player out of overlapping walls.
- *
- * If the player is deeply embedded in a wall, a small random jitter is added to help prevent the player from getting stuck.
- */
-export function resolveWallCollisions() {
+
+function resolveEntityCollisions(entities, entityType, collisionSize) {
   if (!myPlayer) return;
 
   const playerCircle = {
@@ -228,12 +230,11 @@ export function resolveWallCollisions() {
     radius: config.collision.sizes.player,
   };
 
-  // Handle wall collisions separately with push behavior
-  walls.forEach((wall) => {
-    const dx = playerCircle.x - wall.x;
-    const dy = playerCircle.y - wall.y;
+  entities.forEach((entity) => {
+    const dx = playerCircle.x - entity.x;
+    const dy = playerCircle.y - entity.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    const minDist = playerCircle.radius + config.collision.sizes.wall;
+    const minDist = playerCircle.radius + collisionSize;
 
     if (distance < minDist && distance > 0) {
       // Calculate overlap and create a push force
@@ -245,7 +246,7 @@ export function resolveWallCollisions() {
       const pushX = (dx / distance) * pushForce * dampingFactor;
       const pushY = (dy / distance) * pushForce * dampingFactor;
 
-      // Apply the push to move player out of wall
+      // Apply the push to move player out of spike
       myPlayer.x += pushX;
       myPlayer.y += pushY;
 
@@ -257,4 +258,12 @@ export function resolveWallCollisions() {
       }
     }
   });
+}
+
+export function resolveWallCollisions() {
+  resolveEntityCollisions(walls, "wall", config.collision.sizes.wall);
+}
+
+export function resolveSpikeCollisions() {
+  resolveEntityCollisions(spikes, "spike", config.collision.sizes.spike);
 }

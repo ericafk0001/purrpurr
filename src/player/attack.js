@@ -51,9 +51,9 @@ export function startAttack() {
   }
 }
 /**
- * Handles attack actions based on the currently active inventory item.
+ * Executes the appropriate attack or item action based on the currently active inventory item.
  *
- * If the active item is consumable, uses the item. If it is placeable, calculates a position in front of the player and emits a wall placement event to the server. Otherwise, initiates a standard attack.
+ * Uses consumable items, places walls or spikes in front of the player if a placeable item is selected, or initiates a standard attack for other item types.
  */
 export function handleAttackAction() {
   const activeItem =
@@ -63,17 +63,27 @@ export function handleAttackAction() {
   if (activeItem.type === "consumable") {
     useItem(myPlayer.inventory.activeSlot);
   } else if (activeItem.type === "placeable") {
-    // Calculate wall position in front of player
-    const wallDistance = 69; // Distance from player center
+    // Calculate placement position in front of player
+    const placeDistance = 69; // Distance from player center
     const angle = myPlayer.rotation + Math.PI / 2; // Player's facing angle
-    const wallX = myPlayer.x + Math.cos(angle) * wallDistance;
-    const wallY = myPlayer.y + Math.sin(angle) * wallDistance;
-    // Request wall placement from server - rotate wall 90 degrees to match player orientation
-    socket.emit("placeWall", {
-      x: wallX,
-      y: wallY,
-      rotation: myPlayer.rotation + Math.PI / 2, // Rotate wall 90 degrees to match player orientation
-    });
+    const placeX = myPlayer.x + Math.cos(angle) * placeDistance;
+    const placeY = myPlayer.y + Math.sin(angle) * placeDistance;
+
+    if (activeItem.id === "wall") {
+      // Request wall placement from server - rotate wall 90 degrees to match player orientation
+      socket.emit("placeWall", {
+        x: placeX,
+        y: placeY,
+        rotation: myPlayer.rotation + Math.PI / 2, // Rotate wall 90 degrees to match player orientation
+      });
+    } else if (activeItem.id === "spike") {
+      // Request spike placement from server
+      socket.emit("placeSpike", {
+        x: placeX,
+        y: placeY,
+        rotation: myPlayer.rotation, // Spikes use player rotation directly
+      });
+    }
   } else {
     startAttack();
   }
@@ -124,7 +134,7 @@ export function handleAttackKeydown(e) {
 
 /**
  * Handles mouse click events for initiating attacks.
- * 
+ *
  * If the player is not interacting with chat or inventory UI, triggers the unified attack action and returns `true` to indicate the event was handled. Returns `false` if the click occurs while in chat mode.
  * @param {MouseEvent} e - The mouse event object.
  * @return {boolean} `true` if the attack action was triggered; otherwise, `false`.
