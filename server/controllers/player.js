@@ -76,25 +76,63 @@ export function damagePlayer(
   player.health = Math.max(0, player.health - amount);
   player.lastDamageTime = Date.now();
 
+  let knockbackDirection = 0;
+
   // Apply knockback if attacker position is available
   if (attacker) {
     const dx = player.x - attacker.x;
     const dy = player.y - attacker.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > 0) {
-      // Use weapon-specific knockback settings
-      player.velocity.x = (dx / dist) * weaponKnockback.force;
-      player.velocity.y = (dy / dist) * weaponKnockback.force;
+      // Calculate knockback direction for movement restriction
+      knockbackDirection = Math.atan2(dy, dx);
 
-      // Set up velocity decay using weapon values
+      // Clear any existing knockback first
+      player.velocity.x = 0;
+      player.velocity.y = 0;
+
+      // Apply knockback with original force (remove the scaling that broke it)
+      const knockbackForce = weaponKnockback.force;
+      const normalizedDx = dx / dist;
+      const normalizedDy = dy / dist;
+      
+      // Apply one-time knockback impulse
+      player.velocity.x = normalizedDx * knockbackForce;
+      player.velocity.y = normalizedDy * knockbackForce;
+
+      // Set up velocity decay using weapon-specific values
       player.lastKnockbackTime = Date.now();
       player.knockbackDecay = weaponKnockback.decay;
       player.knockbackDuration = weaponKnockback.duration;
+
+      // Set up movement restriction if enabled and from spike damage
+      if (gameConfig.player.knockback.movementRestriction.enabled && 
+          attacker && attacker.type === "spike") {
+        player.movementRestriction = {
+          active: true,
+          startTime: Date.now(),
+          duration: gameConfig.player.knockback.movementRestriction.duration,
+          knockbackDirection: knockbackDirection,
+          directionPenalty: gameConfig.player.knockback.movementRestriction.directionPenalty,
+          sideMovementPenalty: gameConfig.player.knockback.movementRestriction.sideMovementPenalty,
+          oppositeMovementBonus: gameConfig.player.knockback.movementRestriction.oppositeMovementBonus,
+          fadeOut: gameConfig.player.knockback.movementRestriction.fadeOut
+        };
+      }
+      
+      console.log(`Applied knockback: Force=${knockbackForce}, Velocity=[${player.velocity.x.toFixed(2)}, ${player.velocity.y.toFixed(2)}]`);
     }
   }
 
-  // Broadcast health update
-  broadcastHealthUpdate(playerId, players, io, gameConfig);
+  // Broadcast health update with knockback direction
+  io.emit("playerHealthUpdate", {
+    playerId,
+    health: player.health,
+    maxHealth: gameConfig.player.health.max,
+    timestamp: Date.now(),
+    velocity: player.velocity,
+    knockbackDirection: knockbackDirection,
+  });
 
   if (player.health <= 0 && oldHealth > 0) {
     handlePlayerDeath(playerId, players, io, gameConfig, trees, stones);
@@ -185,4 +223,48 @@ export function handlePlayerDeath(
   if (player) {
     player.respawnTimeoutId = respawnTimeout;
   }
+}
+
+/**
+ * Calculates movement speed multiplier based on player's movement direction relative to knockback direction.
+ * Returns reduced speed when moving in the knockback direction, normal speed otherwise.
+ */
+export function getMovementSpeedMultiplier(player, movementDirection) {
+  if (!player.movementRestriction || !player.movementRestriction.active) {
+    return 1.0; // No restriction active
+  }
+
+  const currentTime = Date.now();
+  const elapsed = currentTime - player.movementRestriction.startTime;
+  
+  // Check if restriction has expired
+  if (elapsed >= player.movementRestriction.duration) {
+    player.movementRestriction.active = false;
+    return 1.0;
+  }
+
+  // Calculate angle difference between movement and knockback direction
+  const knockbackDir = player.movementRestriction.knockbackDirection;
+  let angleDiff = Math.abs(movementDirection - knockbackDir);
+  
+  // Normalize angle difference to 0-π range
+  if (angleDiff > Math.PI) {
+    angleDiff = 2 * Math.PI - angleDiff;
+  }
+
+  // If moving in knockback direction (within 45 degrees), apply penalty
+  if (angleDiff < Math.PI / 4) {
+    let multiplier = player.movementRestriction.directionPenalty;
+    
+    // Apply fade out effect if enabled
+    if (player.movementRestriction.fadeOut) {
+      const fadeProgress = elapsed / player.movementRestriction.duration;
+      multiplier = player.movementRestriction.directionPenalty + 
+                   (1.0 - player.movementRestriction.directionPenalty) * fadeProgress;
+    }
+    
+    return multiplier;
+  }
+
+  return 1.0; // Normal speed for other directions
 }

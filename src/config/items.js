@@ -19,9 +19,9 @@ export const gameItems = {
       moveSpeedMultiplier: 1.0, // Player move speed multiplier when equipped
     },
     knockback: {
-      force: 340, // Base knockback force
-      duration: 210, // How long knockback lasts in ms
-      decay: 1, // How quickly knockback velocity decays (per frame)
+      force: 600, // Hammer knockback force (moderate)
+      duration: 300, // How long knockback lasts in ms
+      decay: 0.85, // How quickly knockback velocity decays (per frame)
     },
   },
   apple: {
@@ -76,9 +76,9 @@ export const gameItems = {
       preserveRatio: true,
     },
     knockback: {
-      force: 340, // Base knockback force
-      duration: 210, // How long knockback lasts in ms
-      decay: 1, // How quickly knockback velocity decays (per frame)
+      force: 1100, // Reasonable knockback force (slightly higher than hammer)
+      duration: 400, // Normal knockback duration
+      decay: 0.9, // Normal decay rate
     },
   },
 };

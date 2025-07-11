@@ -2,6 +2,7 @@
 import { myPlayer, config, keys, targetCamera } from "../utils/constants.js";
 import { isMobileDevice } from "../ui/mobile.js";
 import { getVirtualKeys } from "../physics/movement.js";
+import { getMovementSpeedMultiplier } from "../physics/movement.js";
 import { clampWithEasing } from "../utils/helpers.js";
 import {
   handleCollisions,
@@ -94,9 +95,67 @@ export function updatePosition(deltaTime) {
     dy *= normalizer;
   }
 
+  // Apply movement restriction if active
+  if (myPlayer.movementRestriction && myPlayer.movementRestriction.active) {
+    const restriction = myPlayer.movementRestriction;
+    const now = Date.now();
+    const elapsed = now - restriction.startTime;
+    const restrictionConfig = config.player.knockback.movementRestriction;
+
+    if (elapsed < restrictionConfig.duration) {
+      // Only apply restriction if player is actually trying to move
+      if (dx !== 0 || dy !== 0) {
+        // Calculate movement direction relative to knockback direction
+        const moveAngle = Math.atan2(dy, dx);
+        const knockbackAngle = restriction.knockbackDirection;
+
+        // Calculate angle difference (shortest path)
+        let angleDiff = moveAngle - knockbackAngle;
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+        const absAngleDiff = Math.abs(angleDiff);
+
+        // Determine movement penalty based on direction
+        let speedMultiplier = 1.0;
+
+        if (absAngleDiff < Math.PI / 3) {
+          // Moving in knockback direction (60 degree cone) - heavily penalized
+          speedMultiplier = restrictionConfig.directionPenalty;
+        } else if (absAngleDiff > (2 * Math.PI) / 3) {
+          // Moving opposite to knockback (60 degree cone) - bonus speed
+          speedMultiplier = restrictionConfig.oppositeMovementBonus;
+        } else {
+          // Moving perpendicular to knockback - moderate penalty
+          speedMultiplier = restrictionConfig.sideMovementPenalty;
+        }
+
+        // Apply fade out effect if enabled
+        if (restrictionConfig.fadeOut) {
+          const fadeProgress = elapsed / restrictionConfig.duration;
+          // Smoothly interpolate back to normal speed
+          const fadeFactor = 1 - Math.pow(1 - fadeProgress, 2); // Ease-out curve
+          speedMultiplier = speedMultiplier + (1 - speedMultiplier) * fadeFactor;
+        }
+
+        // Apply the restriction
+        dx *= speedMultiplier;
+        dy *= speedMultiplier;
+      }
+    } else {
+      // Restriction expired, remove it
+      myPlayer.movementRestriction.active = false;
+    }
+  }
+
   // Scale movement by deltaTime for frame-rate independence
   dx *= config.moveSpeed * deltaTime;
   dy *= config.moveSpeed * deltaTime;
+
+  // Apply movement restriction multiplier
+  const speedMultiplier = getMovementSpeedMultiplier();
+  dx *= speedMultiplier;
+  dy *= speedMultiplier;
 
   const { dx: slidingDx, dy: slidingDy } = handleCollisions(dx, dy);
 

@@ -54,9 +54,15 @@ export const gameConfig = {
       barHeight: 10, // Slightly taller
     },
     knockback: {
-      force: 6, // Base knockback force
-      duration: 200, // How long knockback effect lasts in ms
-      decay: 0.9, // How quickly knockback velocity decays
+      // Remove global knockback settings - these should be item-specific
+      movementRestriction: {
+        enabled: true,
+        duration: 1000,
+        directionPenalty: 0.3,
+        sideMovementPenalty: 1.0,
+        oppositeMovementBonus: 1.0,
+        fadeOut: true,
+      },
     },
     attack: {
       damage: 10,
@@ -126,7 +132,7 @@ export const gameConfig = {
     minDistance: 60, // Minimum distance between spikes (smaller than walls)
     maxSpikesPerCell: 4, // Max spikes in a grid cell (more than walls)
     placementBuffer: 0, // Extra space needed around spikes
-    damageInterval: 1000, // How often spikes can damage the same player (in ms)
+    damageInterval: 169, // How often spikes can damage the same player (in ms)
     damageRadius: 5, // Extra pixels beyond collision circle for damage area
   },
 };

@@ -8,6 +8,86 @@ import {
   resetVirtualKeys,
 } from "../ui/mobile.js";
 import { sendPlayerMovement } from "../network/socketHandlers.js";
+import { gameConfig } from "../config/config.js";
+
+// Track movement restriction state
+let movementRestriction = null;
+
+/**
+ * Sets movement restriction after taking knockback from a spike
+ */
+export function setMovementRestriction(knockbackDirection, duration = 3000) {
+  movementRestriction = {
+    knockbackDirection: knockbackDirection,
+    startTime: Date.now(),
+    duration: duration,
+    active: true,
+  };
+  console.log(
+    `Movement restriction set! Knockback direction: ${(knockbackDirection * 180) /
+      Math.PI}°`
+  );
+}
+
+/**
+ * Gets movement speed multiplier based on current input direction relative to knockback
+ */
+export function getMovementSpeedMultiplier() {
+  if (!movementRestriction || !movementRestriction.active || !myPlayer) {
+    return 1.0;
+  }
+
+  const elapsed = Date.now() - movementRestriction.startTime;
+  if (elapsed >= movementRestriction.duration) {
+    movementRestriction.active = false;
+    console.log("Movement restriction expired");
+    return 1.0;
+  }
+
+  // Get current input direction from keys
+  const currentKeys = getVirtualKeys();
+  let inputX = 0;
+  let inputY = 0;
+
+  if (currentKeys.w) inputY -= 1;
+  if (currentKeys.s) inputY += 1;
+  if (currentKeys.a) inputX -= 1;
+  if (currentKeys.d) inputX += 1;
+
+  // If no input, no restriction needed
+  if (inputX === 0 && inputY === 0) {
+    return 1.0;
+  }
+
+  // Calculate input direction
+  const inputDirection = Math.atan2(inputY, inputX);
+  const knockbackDir = movementRestriction.knockbackDirection;
+
+  // Calculate angle difference
+  let angleDiff = inputDirection - knockbackDir;
+  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+  const absAngleDiff = Math.abs(angleDiff);
+
+  console.log(
+    `Input dir: ${((inputDirection * 180) / Math.PI).toFixed(1)}°, Knockback dir: ${(
+      (knockbackDir * 180) / Math.PI
+    ).toFixed(1)}°, Diff: ${((absAngleDiff * 180) / Math.PI).toFixed(1)}°`
+  );
+
+  // FIXED: Only restrict movement when moving OPPOSITE to knockback direction (toward the spike)
+  // Knockback direction points AWAY from spike, so opposite direction points TOWARD spike
+  if (absAngleDiff > (2 * Math.PI) / 3) {
+    // Within 60 degrees of OPPOSITE to knockback (toward spike)
+    const multiplier = gameConfig.player.knockback.movementRestriction.directionPenalty;
+    console.log(`RESTRICTED! Moving toward spike. Speed: ${(multiplier * 100).toFixed(1)}%`);
+    return multiplier;
+  }
+
+  // Normal speed for ALL other directions (including side movement)
+  return 1.0;
+}
 
 /**
  * Returns the current movement key states for the active input method.

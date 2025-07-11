@@ -96,6 +96,10 @@ export function setupSocketHandlers(
           if (elapsed < player.knockbackDuration) {
             player.velocity.x *= player.knockbackDecay;
             player.velocity.y *= player.knockbackDecay;
+            
+            // Stop very small velocities to prevent jitter
+            if (Math.abs(player.velocity.x) < 0.1) player.velocity.x = 0;
+            if (Math.abs(player.velocity.y) < 0.1) player.velocity.y = 0;
           } else {
             player.velocity.x = 0;
             player.velocity.y = 0;
@@ -103,15 +107,55 @@ export function setupSocketHandlers(
           }
         }
 
-        // Apply velocity to position
-        player.x += player.velocity.x;
-        player.y += player.velocity.y;
+        // Apply velocity to position with reasonable limits
+        if (player.velocity) {
+          const maxVelocity = 10; // Prevent excessive velocity
+          player.velocity.x = Math.max(-maxVelocity, Math.min(maxVelocity, player.velocity.x));
+          player.velocity.y = Math.max(-maxVelocity, Math.min(maxVelocity, player.velocity.y));
+          
+          player.x += player.velocity.x;
+          player.y += player.velocity.y;
+        }
 
-        // Then handle normal movement
-        const maxSpeed = gameConfig.moveSpeed * 1.5;
+        // Calculate movement with potential speed restrictions
+        let maxSpeed = gameConfig.moveSpeed * 1.5;
         const dx = movement.x - player.x;
         const dy = movement.y - player.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Apply movement restriction if active
+        if (player.movementRestriction && player.movementRestriction.active) {
+          const currentTime = Date.now();
+          const elapsed = currentTime - player.movementRestriction.startTime;
+          
+          // Check if restriction has expired
+          if (elapsed >= player.movementRestriction.duration) {
+            player.movementRestriction.active = false;
+          } else if (distance > 0) {
+            // Calculate the direction the player is trying to move
+            const movementDirection = Math.atan2(dy, dx);
+            const knockbackDir = player.movementRestriction.knockbackDirection;
+            
+            // Calculate angle difference (normalize to -π to π)
+            let angleDiff = movementDirection - knockbackDir;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            const absAngleDiff = Math.abs(angleDiff);
+
+            // Determine movement type and apply appropriate modifier
+            if (absAngleDiff < Math.PI / 3) { // Within 60 degrees of knockback direction
+              const multiplier = gameConfig.player.knockback.movementRestriction.directionPenalty;
+              maxSpeed *= multiplier;
+            } else if (absAngleDiff > Math.PI * 2/3) { // Within 60 degrees of opposite direction
+              const multiplier = gameConfig.player.knockback.movementRestriction.oppositeMovementBonus;
+              maxSpeed *= multiplier;
+            } else { // Side movement
+              const multiplier = gameConfig.player.knockback.movementRestriction.sideMovementPenalty;
+              maxSpeed *= multiplier;
+            }
+          }
+        }
 
         if (distance <= maxSpeed) {
           player.x = movement.x;
@@ -156,7 +200,7 @@ export function setupSocketHandlers(
                 gameFunctions.damagePlayer(
                   socket.id,
                   gameItems.spike.damage,
-                  spike
+                  spike // Pass the spike object as attacker for proper knockback
                 );
 
                 // Emit playerHit event to trigger floating damage numbers

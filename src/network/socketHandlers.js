@@ -25,6 +25,7 @@ import { wallShakes } from "../rendering/drawWorld.js";
 import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
 import { updateCamera } from "../core/camera.js";
+import { setMovementRestriction } from "../physics/movement.js";
 
 /**
  * Emits the local player's position and rotation to the server for multiplayer synchronization.
@@ -74,11 +75,20 @@ socket.on("playerHealthUpdate", (data) => {
     player.velocity = data.velocity;
   }
 
-  // If this is our player, update local state
+  // If this is our player, update local state and set up movement restriction
   if (data.playerId === socket.id && myPlayer) {
     myPlayer.health = player.health;
-    if (myPlayer.velocity) {
+    if (data.velocity) {
       myPlayer.velocity = data.velocity;
+    }
+    
+    // Set up movement restriction if knockback direction is provided and system is enabled
+    if (data.knockbackDirection !== undefined && 
+        config.player.knockback.movementRestriction.enabled) {
+      setMovementRestriction(
+        data.knockbackDirection, 
+        config.player.knockback.movementRestriction.duration
+      );
     }
   }
 });
