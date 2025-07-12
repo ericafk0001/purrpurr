@@ -13,7 +13,6 @@ export function loadAssets() {
     img.onload = () => {
       assets[key] = img;
       assets.loadStatus[key] = true;
-      console.log(`Loaded asset: ${key}`);
     };
     img.onerror = (err) => {
       console.error(`Failed to load asset: ${key}`, err);
@@ -33,7 +32,6 @@ export function loadAssets() {
     img.onload = () => {
       assets[key] = img;
       assets.loadStatus[key] = true;
-      console.log(`Loaded item asset: ${key}`);
     };
     img.onerror = (err) => {
       console.error(`Failed to load item asset: ${key}`, err);

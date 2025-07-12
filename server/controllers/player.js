@@ -120,8 +120,6 @@ export function damagePlayer(
           fadeOut: gameConfig.player.knockback.movementRestriction.fadeOut
         };
       }
-      
-      console.log(`Applied knockback: Force=${knockbackForce}, Velocity=[${player.velocity.x.toFixed(2)}, ${player.velocity.y.toFixed(2)}]`);
     }
   }
 

@@ -23,10 +23,6 @@ export function setMovementRestriction(knockbackDirection, duration = gameConfig
     duration: duration,
     active: true,
   };
-  console.log(
-    `Movement restriction set! Knockback direction: ${(knockbackDirection * 180) /
-      Math.PI}°`
-  );
 }
 
 /**
@@ -40,7 +36,6 @@ export function getMovementSpeedMultiplier() {
   const elapsed = Date.now() - movementRestriction.startTime;
   if (elapsed >= movementRestriction.duration) {
     movementRestriction.active = false;
-    console.log("Movement restriction expired");
     return 1.0;
   }
 
@@ -70,18 +65,11 @@ export function getMovementSpeedMultiplier() {
 
   const absAngleDiff = Math.abs(angleDiff);
 
-  console.log(
-    `Input dir: ${((inputDirection * 180) / Math.PI).toFixed(1)}°, Knockback dir: ${(
-      (knockbackDir * 180) / Math.PI
-    ).toFixed(1)}°, Diff: ${((absAngleDiff * 180) / Math.PI).toFixed(1)}°`
-  );
-
   // FIXED: Only restrict movement when moving OPPOSITE to knockback direction (toward the spike)
   // Knockback direction points AWAY from spike, so opposite direction points TOWARD spike
   if (absAngleDiff > (2 * Math.PI) / 3) {
     // Within 60 degrees of OPPOSITE to knockback (toward spike)
     const multiplier = gameConfig.player.knockback.movementRestriction.directionPenalty;
-    console.log(`RESTRICTED! Moving toward spike. Speed: ${(multiplier * 100).toFixed(1)}%`);
     return multiplier;
   }
 

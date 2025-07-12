@@ -27,7 +27,6 @@ export function setupSocketHandlers(
 
   io.on("connection", (socket) => {
     const spawnPos = findValidSpawnPosition();
-    console.log("A player connected:", socket.id);
 
     // Initialize player with health, inventory and velocity
     players[socket.id] = {

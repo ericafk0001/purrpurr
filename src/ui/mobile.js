@@ -99,9 +99,6 @@ export let isMobileDevice =
     navigator.maxTouchPoints &&
     navigator.maxTouchPoints > 2);
 
-// Log mobile detection for debugging
-console.log("Mobile device detected:", isMobileDevice);
-
 export let touchControls = {
   joystick: {
     active: false,
@@ -1012,3 +1009,4 @@ export function setVirtualKeys(keys) {
 export function resetVirtualKeys() {
   virtualKeys.w = virtualKeys.s = virtualKeys.a = virtualKeys.d = false;
 }
+
