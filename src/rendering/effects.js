@@ -94,19 +94,28 @@ export function addFloatingNumber(x, y, value, type = "damage") {
  * Draws collision boundaries for players, trees, stones, walls, and spikes using configured sizes and colors. If weapon debug mode is enabled, displays the attack arc for players wielding a hammer, including a highlight when attacking.
  */
 export function drawCollisionCircles() {
+  if (!config.collision.debug) return;
+
+  ctx.save();
   ctx.strokeStyle = config.collision.debugColor;
   ctx.lineWidth = 2;
 
-  // player collision circles
-  Object.values(players).forEach((player) => {
+  // Draw player collision circles
+  Object.entries(players).forEach(([id, player]) => {
+    if (!player) return;
+
+    // Use display position if available, otherwise calculate from actual position
+    let screenX, screenY;
+    if (player.displayX !== undefined && player.displayY !== undefined) {
+      screenX = player.displayX;
+      screenY = player.displayY;
+    } else {
+      screenX = player.x - camera.x;
+      screenY = player.y - camera.y;
+    }
+
     ctx.beginPath();
-    ctx.arc(
-      player.x - camera.x,
-      player.y - camera.y,
-      config.collision.sizes.player,
-      0,
-      Math.PI * 2
-    );
+    ctx.arc(screenX, screenY, config.collision.sizes.player, 0, Math.PI * 2);
     ctx.stroke();
   });
 
@@ -228,4 +237,6 @@ export function drawCollisionCircles() {
       }
     });
   }
+
+  ctx.restore();
 }

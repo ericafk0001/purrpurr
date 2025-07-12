@@ -8,14 +8,27 @@ import { drawChatBubble } from "../ui/chat.js";
  * The player sprite is rendered relative to the camera, with attack swings smoothly animating the sprite's rotation. If the player has an equipped item, it is drawn with appropriate positioning and scaling. A chat bubble is displayed if the player has active chat content.
  */
 export function drawPlayer(player) {
+  if (!player) return;
+
+  // Use render position if available, otherwise use actual position
+  const x = player.renderX !== undefined ? player.renderX : player.x;
+  const y = player.renderY !== undefined ? player.renderY : player.y;
+  const rotation = player.renderRotation !== undefined ? player.renderRotation : player.rotation;
+
+  const screenX = x - camera.x;
+  const screenY = y - camera.y;
+
+  // Store render position for collision debug and health bar alignment
+  player.displayX = screenX;
+  player.displayY = screenY;
+  player.displayRotation = rotation;
+
   if (assets.player && assets.loadStatus.player) {
     ctx.save();
-    // Use interpolated position if available, otherwise use normal position
-    const renderX = player.renderX !== undefined ? player.renderX : player.x;
-    const renderY = player.renderY !== undefined ? player.renderY : player.y;
-    ctx.translate(renderX - camera.x, renderY - camera.y);
+    
+    ctx.translate(screenX, screenY);
 
-    let baseRotation = player.rotation || 0;
+    let baseRotation = rotation || 0;
 
     if (player.attacking && player.attackProgress !== undefined) {
       const maxSwingAngle = (110 * Math.PI) / 180;
@@ -59,7 +72,14 @@ export function drawPlayer(player) {
     );
 
     ctx.restore();
-    drawChatBubble(player);
+    
+    // Use render position for chat bubble too
+    const chatPlayer = {
+      ...player,
+      x: x,
+      y: y
+    };
+    drawChatBubble(chatPlayer);
   }
 }
 /**

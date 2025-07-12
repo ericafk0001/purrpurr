@@ -106,6 +106,7 @@ export function resolvePlayerCollisions() {
     if (id === socket.id) continue;
 
     const otherPlayer = players[id];
+    // Use current positions, not render positions
     const dx = myPlayer.x - otherPlayer.x;
     const dy = myPlayer.y - otherPlayer.y;
     const distance = Math.sqrt(dx * dx + dy * dy);

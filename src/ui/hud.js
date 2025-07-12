@@ -15,12 +15,24 @@ import {
  * For each player, renders a rounded rectangular health bar above their position on the canvas, with the fill proportionate to their current health.
  */
 export function drawHealthBars() {
-  Object.values(players).forEach((player) => {
+  Object.entries(players).forEach(([id, player]) => {
+    if (!player || player.isDead) return;
+
+    // Use display position if available (from rendering), otherwise calculate from actual position
+    let screenX, screenY;
+    if (player.displayX !== undefined && player.displayY !== undefined) {
+      screenX = player.displayX;
+      screenY = player.displayY;
+    } else {
+      screenX = player.x - camera.x;
+      screenY = player.y - camera.y;
+    }
+
     // Skip if player doesn't have health
     if (typeof player.health === "undefined") return;
 
-    const healthBarY = player.y - camera.y + config.player.health.barOffset;
-    const healthBarX = player.x - camera.x - config.player.health.barWidth / 2;
+    const healthBarY = screenY + config.player.health.barOffset;
+    const healthBarX = screenX - config.player.health.barWidth / 2;
     const healthPercent = player.health / config.player.health.max;
     const barHeight = config.player.health.barHeight;
     const radius = barHeight / 2;

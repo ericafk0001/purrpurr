@@ -41,7 +41,7 @@ export function drawPlayers(interpolation = 1) {
   // Draw background and grid first
   drawBackground();
 
-  // Define draw layers with fixed order (no Y-sorting)
+  // Define draw layers with interpolated positions
   const drawLayers = [
     // Layer 1 - Walls and Spikes (bottom)
     ...walls
@@ -53,32 +53,29 @@ export function drawPlayers(interpolation = 1) {
 
     // Layer 2 - Players and Stones (middle)
     ...Object.entries(players).map(([id, player]) => {
-      // Store the player with interpolated position if available
-      if (player.previousPosition && player !== myPlayer) {
-        // Interpolate between previous and current position
-        const interpolatedX =
-          player.previousPosition.x +
-          (player.x - player.previousPosition.x) * interpolation;
-        const interpolatedY =
-          player.previousPosition.y +
-          (player.y - player.previousPosition.y) * interpolation;
-
+      if (player === myPlayer) {
+        // Local player uses immediate position
         return {
           ...player,
-          renderX: interpolatedX,
-          renderY: interpolatedY,
+          renderX: player.x,
+          renderY: player.y,
+          renderRotation: player.rotation,
+          id: id,
+          type: "player",
+        };
+      } else {
+        // Other players: calculate interpolated render position but don't modify actual position
+        const interpolatedPos = getInterpolatedPosition(player);
+        
+        return {
+          ...player,
+          renderX: interpolatedPos.x,
+          renderY: interpolatedPos.y,
+          renderRotation: interpolatedPos.rotation,
           id: id,
           type: "player",
         };
       }
-
-      return {
-        ...player,
-        renderX: player.x,
-        renderY: player.y,
-        id: id,
-        type: "player",
-      };
     }),
     ...stones
       .filter((stone) => isInViewport(stone))
@@ -128,6 +125,7 @@ export function drawPlayers(interpolation = 1) {
     drawMobileControls();
   }
 }
+
 /**
  * Fills the canvas with the configured background color and optionally draws a grid overlay aligned with the camera position.
  */
@@ -163,3 +161,81 @@ export function drawBackground() {
     ctx.stroke();
   }
 }
+
+/**
+ * Calculates interpolated position for a player based on their position history
+ */
+function getInterpolatedPosition(player) {
+  const now = Date.now();
+  const interpolationDelay = 100; // 100ms behind real-time for smoothness
+  const targetTime = now - interpolationDelay;
+
+  if (!player.positionHistory || player.positionHistory.length < 2) {
+    // Fallback to current position if no history
+    return {
+      x: player.x || 0,
+      y: player.y || 0,
+      rotation: player.rotation || 0,
+    };
+  }
+
+  // Find two positions to interpolate between
+  let before = null;
+  let after = null;
+
+  for (let i = 0; i < player.positionHistory.length - 1; i++) {
+    const current = player.positionHistory[i];
+    const next = player.positionHistory[i + 1];
+
+    if (current.timestamp <= targetTime && next.timestamp >= targetTime) {
+      before = current;
+      after = next;
+      break;
+    }
+  }
+
+  // If we can't find suitable positions, use the most recent
+  if (!before || !after) {
+    const latest = player.positionHistory[player.positionHistory.length - 1];
+    return {
+      x: latest.x || player.x,
+      y: latest.y || player.y,
+      rotation: latest.rotation || player.rotation,
+    };
+  }
+
+  // Calculate interpolation factor
+  const timeDiff = after.timestamp - before.timestamp;
+  const targetDiff = targetTime - before.timestamp;
+  const factor = timeDiff > 0 ? Math.min(1, Math.max(0, targetDiff / timeDiff)) : 0;
+
+  // Interpolate position
+  const interpolatedX = before.x + (after.x - before.x) * factor;
+  const interpolatedY = before.y + (after.y - before.y) * factor;
+
+  // Interpolate rotation (handle angle wrapping)
+  let rotationDiff = after.rotation - before.rotation;
+
+  // Handle angle wrapping
+  if (rotationDiff > Math.PI) {
+    rotationDiff -= 2 * Math.PI;
+  } else if (rotationDiff < -Math.PI) {
+    rotationDiff += 2 * Math.PI;
+  }
+
+  const interpolatedRotation = before.rotation + rotationDiff * factor;
+
+  return {
+    x: interpolatedX,
+    y: interpolatedY,
+    rotation: interpolatedRotation,
+  };
+}
+  const interpolatedRotation = before.rotation + rotationDiff * factor;
+
+  return {
+    x: interpolatedX,
+    y: interpolatedY,
+    rotation: interpolatedRotation,
+  };
+  

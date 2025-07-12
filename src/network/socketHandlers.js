@@ -111,6 +111,10 @@ socket.on("playerHealthUpdate", (data) => {
   }
 });
 
+// Add interpolation constants
+const INTERPOLATION_DELAY = 100; // 100ms behind real-time
+const MAX_POSITION_HISTORY = 10; // Keep last 10 positions
+
 // Update socket handler for player movement
 socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
@@ -127,7 +131,33 @@ socket.on("playerMoved", (playerInfo) => {
     const clampedX = clampWithEasing(playerInfo.x, 0, config.worldWidth);
     const clampedY = clampWithEasing(playerInfo.y, 0, config.worldHeight);
 
+    // Initialize position history if it doesn't exist
+    if (!player.positionHistory) {
+      player.positionHistory = [];
+    }
+
+    // Add new position to history with timestamp
+    const timestamp = Date.now();
+    player.positionHistory.push({
+      x: clampedX,
+      y: clampedY,
+      rotation: playerInfo.rotation,
+      timestamp: timestamp
+    });
+
+    // Keep only last 10 positions to prevent memory bloat
+    if (player.positionHistory.length > 10) {
+      player.positionHistory.shift();
+    }
+
+    // Update the actual player position (this is what collision/health bars will use)
+    player.x = clampedX;
+    player.y = clampedY;
+    player.rotation = playerInfo.rotation;
+
+    // Update other properties
     players[playerInfo.id] = {
+      ...players[playerInfo.id],
       ...playerInfo,
       x: clampedX,
       y: clampedY,
@@ -138,6 +168,7 @@ socket.on("playerMoved", (playerInfo) => {
       velocity: player.velocity || { x: 0, y: 0 }, // Preserve velocity
       attackStartRotation: player.attackStartRotation, // Preserve attack rotation
       previousPosition: previousPosition, // Add previous position for interpolation
+      positionHistory: player.positionHistory, // Preserve position history
     };
   }
 });
