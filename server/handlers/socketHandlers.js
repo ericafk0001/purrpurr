@@ -250,12 +250,6 @@ export function setupSocketHandlers(
       }
     });
 
-    // Handle heal request (consuming items, etc)
-    socket.on("healRequest", (amount) => {
-      if (amount && amount > 0) {
-        healPlayer(socket.id, amount);
-      }
-    });
 
     // Handle inventory selection syncing
     socket.on("inventorySelect", (data) => {
