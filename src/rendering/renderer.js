@@ -231,11 +231,5 @@ function getInterpolatedPosition(player) {
     rotation: interpolatedRotation,
   };
 }
-  const interpolatedRotation = before.rotation + rotationDiff * factor;
 
-  return {
-    x: interpolatedX,
-    y: interpolatedY,
-    rotation: interpolatedRotation,
-  };
   
