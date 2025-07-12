@@ -57,7 +57,7 @@ export const gameConfig = {
       // Remove global knockback settings - these should be item-specific
       movementRestriction: {
         enabled: true,
-        duration: 1000,
+        duration: 69,
         directionPenalty: 0.3,
         sideMovementPenalty: 1.0,
         oppositeMovementBonus: 1.0,

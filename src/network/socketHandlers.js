@@ -70,15 +70,17 @@ socket.on("playerHealthUpdate", (data) => {
     addFloatingNumber(player.x, player.y - 40, healthDiff, "heal");
   }
 
-  // Apply velocity if provided
-  if (data.velocity) {
+  // Apply velocity if provided and not preserving existing velocity
+  if (data.velocity && !data.preserveVelocity) {
     player.velocity = data.velocity;
   }
 
   // If this is our player, update local state and set up movement restriction
   if (data.playerId === socket.id && myPlayer) {
     myPlayer.health = player.health;
-    if (data.velocity) {
+    
+    // Only update velocity if not preserving it
+    if (data.velocity && !data.preserveVelocity) {
       myPlayer.velocity = data.velocity;
     }
     

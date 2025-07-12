@@ -16,7 +16,7 @@ let movementRestriction = null;
 /**
  * Sets movement restriction after taking knockback from a spike
  */
-export function setMovementRestriction(knockbackDirection, duration = 3000) {
+export function setMovementRestriction(knockbackDirection, duration = gameConfig.player.knockback.movementRestriction.duration) {
   movementRestriction = {
     knockbackDirection: knockbackDirection,
     startTime: Date.now(),

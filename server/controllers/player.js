@@ -17,6 +17,7 @@ export function broadcastHealthUpdate(playerId, players, io, gameConfig) {
     maxHealth: gameConfig.player.health.max,
     timestamp: Date.now(),
     velocity: player.velocity,
+    // Don't send knockback direction during healing - preserve existing restrictions
   });
 }
 
@@ -161,8 +162,24 @@ export function healPlayer(playerId, amount, players, io, gameConfig) {
     player.health + amount
   );
 
-  // Broadcast health update
-  broadcastHealthUpdate(playerId, players, io, gameConfig);
+  // Check if player is currently experiencing knockback
+  const hasActiveKnockback = player.lastKnockbackTime && 
+    (Date.now() - player.lastKnockbackTime < player.knockbackDuration);
+
+  // Only broadcast health update if no active knockback to prevent interference
+  if (!hasActiveKnockback) {
+    broadcastHealthUpdate(playerId, players, io, gameConfig);
+  } else {
+    // If there's active knockback, send a minimal health update without velocity
+    io.emit("playerHealthUpdate", {
+      playerId,
+      health: player.health,
+      maxHealth: gameConfig.player.health.max,
+      timestamp: Date.now(),
+      // Don't send velocity during active knockback to preserve it
+      preserveVelocity: true,
+    });
+  }
 
   return player.health > oldHealth; // Return true if any healing was applied
 }
