@@ -89,6 +89,10 @@ export function setupSocketHandlers(
     socket.on("playerMovement", (movement) => {
       const player = players[socket.id];
       if (player && !player.isDead) {
+        // Store previous position for validation
+        const previousX = player.x;
+        const previousY = player.y;
+        
         // Apply velocity decay with weapon-specific knockback configuration
         if (player.lastKnockbackTime) {
           const elapsed = Date.now() - player.lastKnockbackTime;
@@ -96,7 +100,6 @@ export function setupSocketHandlers(
             player.velocity.x *= player.knockbackDecay;
             player.velocity.y *= player.knockbackDecay;
             
-            // Stop very small velocities to prevent jitter
             if (Math.abs(player.velocity.x) < 0.1) player.velocity.x = 0;
             if (Math.abs(player.velocity.y) < 0.1) player.velocity.y = 0;
           } else {
@@ -108,55 +111,28 @@ export function setupSocketHandlers(
 
         // Apply velocity to position with reasonable limits
         if (player.velocity) {
-          const maxVelocity = 10; // Prevent excessive velocity
+          const maxVelocity = 10;
           player.velocity.x = Math.max(-maxVelocity, Math.min(maxVelocity, player.velocity.x));
           player.velocity.y = Math.max(-maxVelocity, Math.min(maxVelocity, player.velocity.y));
           
           player.x += player.velocity.x;
           player.y += player.velocity.y;
+
+          // Apply world bounds after velocity movement
+          player.x = Math.max(0, Math.min(gameConfig.worldWidth, player.x));
+          player.y = Math.max(0, Math.min(gameConfig.worldHeight, player.y));
         }
 
-        // Calculate movement with potential speed restrictions
-        let maxSpeed = gameConfig.moveSpeed * 1.5;
-        const dx = movement.x - player.x;
-        const dy = movement.y - player.y;
+        // Calculate movement distance for validation
+        const dx = movement.x - previousX;
+        const dy = movement.y - previousY;
         const distance = Math.sqrt(dx * dx + dy * dy);
-
-        // Apply movement restriction if active
-        if (player.movementRestriction && player.movementRestriction.active) {
-          const currentTime = Date.now();
-          const elapsed = currentTime - player.movementRestriction.startTime;
-          
-          // Check if restriction has expired
-          if (elapsed >= player.movementRestriction.duration) {
-            player.movementRestriction.active = false;
-          } else if (distance > 0) {
-            // Calculate the direction the player is trying to move
-            const movementDirection = Math.atan2(dy, dx);
-            const knockbackDir = player.movementRestriction.knockbackDirection;
-            
-            // Calculate angle difference (normalize to -π to π)
-            let angleDiff = movementDirection - knockbackDir;
-            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-            
-            const absAngleDiff = Math.abs(angleDiff);
-
-            // Determine movement type and apply appropriate modifier
-            if (absAngleDiff < Math.PI / 3) { // Within 60 degrees of knockback direction
-              const multiplier = gameConfig.player.knockback.movementRestriction.directionPenalty;
-              maxSpeed *= multiplier;
-            } else if (absAngleDiff > Math.PI * 2/3) { // Within 60 degrees of opposite direction
-              const multiplier = gameConfig.player.knockback.movementRestriction.oppositeMovementBonus;
-              maxSpeed *= multiplier;
-            } else { // Side movement
-              const multiplier = gameConfig.player.knockback.movementRestriction.sideMovementPenalty;
-              maxSpeed *= multiplier;
-            }
-          }
-        }
-
-        if (distance <= maxSpeed) {
+        
+        // Validate movement distance (anti-cheat)
+        const maxMovementDistance = gameConfig.moveSpeed * 0.1; // Reasonable movement per frame
+        
+        if (distance <= maxMovementDistance || !movement.sequence) {
+          // Accept the movement
           player.x = movement.x;
           player.y = movement.y;
           player.rotation = movement.rotation;
@@ -165,77 +141,94 @@ export function setupSocketHandlers(
           player.x = Math.max(0, Math.min(gameConfig.worldWidth, player.x));
           player.y = Math.max(0, Math.min(gameConfig.worldHeight, player.y));
 
-          // Check for spike damage after position update
-          const now = Date.now();
-          spikes.forEach((spike) => {
-            // Skip damage if player is the spike owner
-            if (spike.playerId === socket.id) return;
-
-            const dx = player.x - spike.x;
-            const dy = player.y - spike.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            // Add extra damage radius beyond collision circle
-            const damageDistance =
-              gameConfig.collision.sizes.player +
-              gameConfig.collision.sizes.spike +
-              gameConfig.spikes.damageRadius;
-
-            // Check if player is within damage area of the spike
-            if (distance < damageDistance) {
-              // Only damage if enough time has passed since last spike damage for this player
-              // Initialize spike damage tracking if needed
-              if (!player.spikeDamageTimes) {
-                player.spikeDamageTimes = {};
-              }
-              
-              if (
-                !player.spikeDamageTimes[spike.id] ||
-                now - player.spikeDamageTimes[spike.id] >=
-                  gameConfig.spikes.damageInterval
-              ) {
-                player.spikeDamageTimes[spike.id] = now;
-
-                // Damage the player
-                gameFunctions.damagePlayer(
-                  socket.id,
-                  gameItems.spike.damage,
-                  spike // Pass the spike object as attacker for proper knockback
-                );
-
-                // Emit playerHit event to trigger floating damage numbers
-                io.emit("playerHit", {
-                  attackerId: "spike", // Indicate spike as attacker
-                  targetId: socket.id,
-                  damage: gameItems.spike.damage,
-                  x: spike.x, // Include spike position for effect positioning
-                  y: spike.y,
-                });
-              }
-            }
-          });
-
-          // Broadcast position update with health info and velocity
-          socket.broadcast.emit("playerMoved", {
-            id: socket.id,
-            x: player.x,
-            y: player.y,
-            rotation: player.rotation,
-            inventory: player.inventory,
-            attacking: player.attacking,
-            attackProgress: player.attackProgress,
-            attackStartTime: player.attackStartTime,
-            health: player.health,
-            maxHealth: gameConfig.player.health.max,
-            velocity: player.velocity,
-          });
+          // Send confirmation back to client if this was a predicted movement
+          if (movement.sequence !== undefined) {
+            socket.emit("movementConfirmed", {
+              playerId: socket.id,
+              x: player.x,
+              y: player.y,
+              rotation: player.rotation,
+              sequence: movement.sequence,
+              timestamp: Date.now()
+            });
+          }
         } else {
-          // Position appears invalid - force sync correct position to client
+          // Movement too large - reject and send correction
           socket.emit("positionCorrection", {
             x: player.x,
             y: player.y,
             rotation: player.rotation,
+            sequence: movement.sequence
           });
+          return; // Don't process spike damage or broadcast invalid position
         }
+
+        // Apply movement restriction if active
+        if (player.movementRestriction && player.movementRestriction.active) {
+          const currentTime = Date.now();
+          const elapsed = currentTime - player.movementRestriction.startTime;
+          
+          if (elapsed >= player.movementRestriction.duration) {
+            player.movementRestriction.active = false;
+          }
+        }
+
+        // Check for spike damage after position update
+        const now = Date.now();
+        spikes.forEach((spike) => {
+          if (spike.playerId === socket.id) return;
+
+          const dx = player.x - spike.x;
+          const dy = player.y - spike.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const damageDistance =
+            gameConfig.collision.sizes.player +
+            gameConfig.collision.sizes.spike +
+            gameConfig.spikes.damageRadius;
+
+          if (distance < damageDistance) {
+            if (!player.spikeDamageTimes) {
+              player.spikeDamageTimes = {};
+            }
+            
+            if (
+              !player.spikeDamageTimes[spike.id] ||
+              now - player.spikeDamageTimes[spike.id] >=
+                gameConfig.spikes.damageInterval
+            ) {
+              player.spikeDamageTimes[spike.id] = now;
+
+              gameFunctions.damagePlayer(
+                socket.id,
+                gameItems.spike.damage,
+                spike
+              );
+
+              io.emit("playerHit", {
+                attackerId: "spike",
+                targetId: socket.id,
+                damage: gameItems.spike.damage,
+                x: spike.x,
+                y: spike.y,
+              });
+            }
+          }
+        });
+
+        // Broadcast position update with health info and velocity
+        socket.broadcast.emit("playerMoved", {
+          id: socket.id,
+          x: player.x,
+          y: player.y,
+          rotation: player.rotation,
+          inventory: player.inventory,
+          attacking: player.attacking,
+          attackProgress: player.attackProgress,
+          attackStartTime: player.attackStartTime,
+          health: player.health,
+          maxHealth: gameConfig.player.health.max,
+          velocity: player.velocity,
+        });
       }
     });
 

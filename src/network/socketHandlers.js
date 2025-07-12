@@ -20,12 +20,28 @@ import {
   setLastServerSync,
   setNeedsPositionReconciliation,
   setCorrectedPosition,
+  getMovementHistory,
 } from "../player/player.js";
 import { wallShakes } from "../rendering/drawWorld.js";
 import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
 import { updateCamera } from "../core/camera.js";
 import { setMovementRestriction } from "../physics/movement.js";
+
+/**
+ * Sends player movement with sequence number for client-side prediction
+ */
+export function sendPlayerMovementWithPrediction(movement) {
+  if (!myPlayer) return;
+
+  socket.emit("playerMovement", {
+    x: myPlayer.x,
+    y: myPlayer.y,
+    rotation: myPlayer.rotation,
+    sequence: movement.sequence,
+    timestamp: movement.timestamp
+  });
+}
 
 /**
  * Emits the local player's position and rotation to the server for multiplayer synchronization.
@@ -336,5 +352,37 @@ socket.on("spikeDestroyed", (data) => {
   const spikeIndex = spikes.findIndex((s) => s.x === data.x && s.y === data.y);
   if (spikeIndex !== -1) {
     spikes.splice(spikeIndex, 1);
+  }
+});
+
+// Add handler for server movement confirmation
+socket.on("movementConfirmed", (data) => {
+  if (data.playerId === socket.id && myPlayer) {
+    // Check if our predicted position differs significantly from server
+    const positionError = Math.sqrt(
+      Math.pow(data.x - myPlayer.x, 2) + Math.pow(data.y - myPlayer.y, 2)
+    );
+    
+    // If error is too large, trigger reconciliation
+    const ERROR_THRESHOLD = 5; // pixels
+    if (positionError > ERROR_THRESHOLD) {
+      setNeedsPositionReconciliation(true);
+      setCorrectedPosition({
+        x: data.x,
+        y: data.y,
+        rotation: data.rotation,
+        sequence: data.sequence
+      });
+    }
+    
+    // Clean up old movement history
+    if (data.sequence !== undefined) {
+      // Remove confirmed movements from history
+      const movementHistory = getMovementHistory();
+      const confirmedIndex = movementHistory.findIndex(m => m.sequence <= data.sequence);
+      if (confirmedIndex >= 0) {
+        movementHistory.splice(0, confirmedIndex + 1);
+      }
+    }
   }
 });

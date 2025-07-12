@@ -137,10 +137,11 @@ export function findValidSpawnPosition(gameConfig, walls) {
  * @param {Array} walls - Existing wall objects with position data.
  * @param {Array} trees - Tree objects with position data.
  * @param {Array} stones - Stone objects with position data.
+ * @param {Array} spikes - Array of existing spikes.
  * @param {Object} gameConfig - Game configuration with collision sizes and placement rules.
  * @return {boolean} True if the wall placement is valid; otherwise, false.
  */
-export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
+export function isValidWallPlacement(x, y, walls, trees, stones, spikes, gameConfig) {
   const wallRadius = gameConfig.collision.sizes.wall;
   const minDistance = gameConfig.walls.minDistance;
 
@@ -149,30 +150,40 @@ export function isValidWallPlacement(x, y, walls, trees, stones, gameConfig) {
     const dx = x - wall.x;
     const dy = y - wall.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance < minDistance) return false;
+    if (distance < minDistance) {
+      return false;
+    }
   }
 
-  // Check distance from trees and stones with exact collision sizes
-  const obstacles = [
-    ...trees.map((tree) => ({
-      ...tree,
-      radius: gameConfig.collision.sizes.tree,
-    })),
-    ...stones.map((stone) => ({
-      ...stone,
-      radius: gameConfig.collision.sizes.stone,
-    })),
-  ];
-
-  // Check each obstacle
-  for (const obstacle of obstacles) {
-    const dx = x - obstacle.x;
-    const dy = y - obstacle.y;
+  // Check distance from spikes
+  for (const spike of spikes) {
+    const dx = x - spike.x;
+    const dy = y - spike.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    const minAllowedDistance =
-      wallRadius + obstacle.radius + gameConfig.walls.placementBuffer;
+    const minSpikeDistance = wallRadius + gameConfig.collision.sizes.spike + 10; // 10px buffer
+    if (distance < minSpikeDistance) {
+      return false;
+    }
+  }
 
-    if (distance < minAllowedDistance) {
+  // Check distance from trees
+  for (const tree of trees) {
+    const dx = x - tree.x;
+    const dy = y - tree.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const minTreeDistance = wallRadius + gameConfig.collision.sizes.tree + 10;
+    if (distance < minTreeDistance) {
+      return false;
+    }
+  }
+
+  // Check distance from stones
+  for (const stone of stones) {
+    const dx = x - stone.x;
+    const dy = y - stone.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const minStoneDistance = wallRadius + gameConfig.collision.sizes.stone + 10;
+    if (distance < minStoneDistance) {
       return false;
     }
   }

@@ -34,7 +34,75 @@ export let lastServerSync = Date.now();
 export let needsPositionReconciliation = false;
 export let correctedPosition = null;
 
-// Player functions
+// Client-side prediction variables
+let movementSequence = 0;
+let movementHistory = [];
+let lastServerSequence = -1;
+const MAX_MOVEMENT_HISTORY = 100;
+
+// Store predicted state
+let predictedPosition = { x: 0, y: 0, rotation: 0 };
+
+/**
+ * Records a movement for client-side prediction
+ */
+function recordMovement(deltaTime, dx, dy, rotation) {
+  const movement = {
+    sequence: movementSequence++,
+    timestamp: Date.now(),
+    deltaTime,
+    dx,
+    dy,
+    rotation,
+    position: { x: myPlayer.x, y: myPlayer.y, rotation: myPlayer.rotation },
+  };
+
+  movementHistory.push(movement);
+
+  // Limit history size
+  if (movementHistory.length > MAX_MOVEMENT_HISTORY) {
+    movementHistory.shift();
+  }
+
+  return movement;
+}
+
+/**
+ * Re-applies movements after server reconciliation
+ */
+function reapplyMovements(fromSequence) {
+  const movementsToReapply = movementHistory.filter((m) => m.sequence > fromSequence);
+
+  for (const movement of movementsToReapply) {
+    // Re-apply the movement
+    applyMovementDelta(movement.deltaTime, movement.dx, movement.dy);
+    myPlayer.rotation = movement.rotation;
+  }
+}
+
+/**
+ * Applies movement delta with collision detection
+ */
+function applyMovementDelta(deltaTime, dx, dy) {
+  // Apply movement restriction multiplier
+  const speedMultiplier = getMovementSpeedMultiplier();
+  dx *= speedMultiplier;
+  dy *= speedMultiplier;
+
+  const { dx: slidingDx, dy: slidingDy } = handleCollisions(dx, dy);
+
+  const newX = myPlayer.x + slidingDx;
+  const newY = myPlayer.y + slidingDy;
+
+  if (newX > 0 && newX < config.worldWidth) myPlayer.x = newX;
+  if (newY > 0 && newY < config.worldHeight) myPlayer.y = newY;
+
+  resolvePlayerCollisions();
+  resolveCollisionPenetration();
+  resolveWallCollisions();
+  resolveSpikeCollisions();
+}
+
 /**
  * Updates the player's position each frame based on input, velocity, and collision resolution.
  *
@@ -47,12 +115,23 @@ export function updatePosition(deltaTime) {
 
   // Handle position correction from server
   if (needsPositionReconciliation && correctedPosition) {
+    // Server correction - reconcile with prediction
+    const serverSequence = correctedPosition.sequence || lastServerSequence;
+
+    // Set to server position
     myPlayer.x = correctedPosition.x;
     myPlayer.y = correctedPosition.y;
     myPlayer.rotation = correctedPosition.rotation;
+
+    // Re-apply movements that happened after this server update
+    if (serverSequence >= 0) {
+      reapplyMovements(serverSequence);
+      lastServerSequence = serverSequence;
+    }
+
     needsPositionReconciliation = false;
     correctedPosition = null;
-    return; // Skip normal movement this frame
+    return;
   }
 
   // Don't allow movement if dead
@@ -75,6 +154,12 @@ export function updatePosition(deltaTime) {
     // Zero out small velocities
     if (Math.abs(myPlayer.velocity.x) < 0.1) myPlayer.velocity.x = 0;
     if (Math.abs(myPlayer.velocity.y) < 0.1) myPlayer.velocity.y = 0;
+
+    // IMPORTANT: Resolve collisions after velocity movement
+    resolvePlayerCollisions();
+    resolveCollisionPenetration();
+    resolveWallCollisions();
+    resolveSpikeCollisions();
   }
 
   let dx = 0;
@@ -164,13 +249,18 @@ export function updatePosition(deltaTime) {
 
   if (newX > 0 && newX < config.worldWidth) myPlayer.x = newX;
   if (newY > 0 && newY < config.worldHeight) myPlayer.y = newY;
-  resolvePlayerCollisions();
-  resolveCollisionPenetration();
-  resolveWallCollisions(); // Add wall collision resolution
-  resolveSpikeCollisions(); // Add spike collision resolution
+  
+  // Only resolve collisions again if there was actual movement input
+  if (dx !== 0 || dy !== 0) {
+    resolvePlayerCollisions();
+    resolveCollisionPenetration();
+    resolveWallCollisions();
+    resolveSpikeCollisions();
+  }
 
   sendPlayerMovement();
 }
+
 /**
  * Rotates the player to face the mouse cursor in world space.
  *
@@ -224,4 +314,11 @@ export function setNeedsPositionReconciliation(value) {
  */
 export function setCorrectedPosition(position) {
   correctedPosition = position;
+}
+
+/**
+ * Gets the movement history for cleanup purposes
+ */
+export function getMovementHistory() {
+  return movementHistory;
 }

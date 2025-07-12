@@ -97,7 +97,7 @@ const gameFunctions = {
         )
     ),
   isValidWallPlacement: (x, y) =>
-    isValidWallPlacement(x, y, walls, trees, stones, gameConfig),
+    isValidWallPlacement(x, y, walls, trees, stones, spikes, gameConfig),
   isValidSpikePosition: (x, y) =>
     isValidSpikePosition(x, y, spikes, walls, trees, stones, gameConfig),
   findValidSpawnPosition: () => findValidSpawnPosition(gameConfig, walls),
