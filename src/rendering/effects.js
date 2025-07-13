@@ -26,6 +26,18 @@ export function drawFloatingNumbers() {
   // Update and draw each floating number
   for (let i = floatingNumbers.length - 1; i >= 0; i--) {
     const number = floatingNumbers[i];
+    
+    // Initialize missing properties if they don't exist
+    if (!number.velocity) {
+      number.velocity = { x: 0, y: -.7 };
+    }
+    if (!number.createdAt) {
+      number.createdAt = now;
+    }
+    if (!number.duration) {
+      number.duration = 700;
+    }
+    
     const age = now - number.createdAt;
 
     if (age >= number.duration) {
@@ -36,12 +48,11 @@ export function drawFloatingNumbers() {
     // Calculate alpha based on age
     const alpha = Math.max(0, 1 - age / number.duration);
 
-    // Update position
+    // Update position - just move up at constant speed
     number.x += number.velocity.x;
     number.y += number.velocity.y;
 
-    // Slow down vertical movement
-    number.velocity.y += 0.1;
+    // No gravity - keep moving up at constant speed
 
     // Draw the number
     ctx.save();
@@ -66,6 +77,7 @@ export function drawFloatingNumbers() {
     ctx.restore();
   }
 }
+
 /**
  * Adds a floating number effect at the specified position to display a value such as damage or healing.
  *
@@ -82,14 +94,21 @@ export function addFloatingNumber(x, y, value, type = "damage") {
     return; // Skip non-numeric values
   }
 
+  const now = performance.now();
+  
   floatingNumbers.push({
     x: x,
     y: y,
-    value: value,
+    value: Math.round(value), // Ensure it's a rounded number
     type: type,
     opacity: 1,
-    startTime: Date.now(),
+    startTime: now,
+    createdAt: now, // Add createdAt for consistency
     duration: 2000,
+    velocity: {
+      x: 0, // No horizontal movement - straight up
+      y: -3 // Strong upward movement
+    }
   });
 }
 
