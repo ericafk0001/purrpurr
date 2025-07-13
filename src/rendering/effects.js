@@ -77,14 +77,19 @@ export function drawFloatingNumbers() {
  * @param {string} [type="damage"] - The type of floating number, affecting its appearance (e.g., "damage" or "heal").
  */
 export function addFloatingNumber(x, y, value, type = "damage") {
+  // Only add floating numbers for numeric values
+  if (typeof value !== 'number' || isNaN(value)) {
+    return; // Skip non-numeric values
+  }
+
   floatingNumbers.push({
-    x,
-    y,
-    value: Math.round(value), // Round to whole numbers
-    type,
-    createdAt: performance.now(),
-    duration: 1000, // How long the number stays visible (ms)
-    velocity: { x: (Math.random() - 0.5) * 2, y: -3 }, // Random spread with upward motion
+    x: x,
+    y: y,
+    value: value,
+    type: type,
+    opacity: 1,
+    startTime: Date.now(),
+    duration: 2000,
   });
 }
 
@@ -104,12 +109,14 @@ export function drawCollisionCircles() {
   Object.entries(players).forEach(([id, player]) => {
     if (!player) return;
 
-    // Use display position if available, otherwise calculate from actual position
+    // Use render position if available (from interpolation), otherwise use actual position
     let screenX, screenY;
-    if (player.displayX !== undefined && player.displayY !== undefined) {
-      screenX = player.displayX;
-      screenY = player.displayY;
+    if (player.renderX !== undefined && player.renderY !== undefined) {
+      // Use interpolated render position for smooth collision circle movement
+      screenX = player.renderX - camera.x;
+      screenY = player.renderY - camera.y;
     } else {
+      // Fallback to actual position
       screenX = player.x - camera.x;
       screenY = player.y - camera.y;
     }

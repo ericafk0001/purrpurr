@@ -118,39 +118,40 @@ const MAX_POSITION_HISTORY = 10; // Keep last 10 positions
 // Update socket handler for player movement
 socket.on("playerMoved", (playerInfo) => {
   if (players[playerInfo.id]) {
-    // Preserve and update animation state
     const player = players[playerInfo.id];
-
-    // Store current position as previous position for interpolation
-    const previousPosition = {
-      x: player.x,
-      y: player.y,
-    };
-
-    // Ensure received position is within bounds
-    const clampedX = clampWithEasing(playerInfo.x, 0, config.worldWidth);
-    const clampedY = clampWithEasing(playerInfo.y, 0, config.worldHeight);
+    const timestamp = Date.now();
 
     // Initialize position history if it doesn't exist
     if (!player.positionHistory) {
       player.positionHistory = [];
     }
 
-    // Add new position to history with timestamp
-    const timestamp = Date.now();
-    player.positionHistory.push({
-      x: clampedX,
-      y: clampedY,
-      rotation: playerInfo.rotation,
-      timestamp: timestamp
-    });
+    // Only add to history if this is actually a new position update
+    const lastPos = player.positionHistory[player.positionHistory.length - 1];
+    const isNewPosition = !lastPos || 
+      Math.abs(lastPos.x - playerInfo.x) > 0.1 || 
+      Math.abs(lastPos.y - playerInfo.y) > 0.1 ||
+      Math.abs(lastPos.rotation - playerInfo.rotation) > 0.01;
 
-    // Keep only last 10 positions to prevent memory bloat
-    if (player.positionHistory.length > 10) {
-      player.positionHistory.shift();
+    if (isNewPosition) {
+      // Add new position to history with server timestamp if available, otherwise use local
+      player.positionHistory.push({
+        x: playerInfo.x,
+        y: playerInfo.y,
+        rotation: playerInfo.rotation,
+        timestamp: playerInfo.timestamp || timestamp // Prefer server timestamp
+      });
+
+      // Keep reasonable history size (increased for better interpolation)
+      if (player.positionHistory.length > 15) {
+        player.positionHistory.shift();
+      }
     }
 
-    // Update the actual player position (this is what collision/health bars will use)
+    // Update the actual player position
+    const clampedX = clampWithEasing(playerInfo.x, 0, config.worldWidth);
+    const clampedY = clampWithEasing(playerInfo.y, 0, config.worldHeight);
+    
     player.x = clampedX;
     player.y = clampedY;
     player.rotation = playerInfo.rotation;
@@ -161,14 +162,8 @@ socket.on("playerMoved", (playerInfo) => {
       ...playerInfo,
       x: clampedX,
       y: clampedY,
-      inventory: playerInfo.inventory || player.inventory,
-      attacking: player.attacking, // Preserve local attack state
-      attackProgress: player.attackProgress,
-      attackStartTime: player.attackStartTime,
-      velocity: player.velocity || { x: 0, y: 0 }, // Preserve velocity
-      attackStartRotation: player.attackStartRotation, // Preserve attack rotation
-      previousPosition: previousPosition, // Add previous position for interpolation
-      positionHistory: player.positionHistory, // Preserve position history
+      positionHistory: player.positionHistory,
+      // ...existing code for other properties...
     };
   }
 });
@@ -417,3 +412,17 @@ socket.on("movementConfirmed", (data) => {
     }
   }
 });
+
+// Add handler for placement errors
+socket.on("placementError", (data) => {
+  if (data.error) {
+    // Show error message to player in console
+    console.warn("Structure placement failed:", data.error);
+    
+    // Don't use floating numbers for text messages - they expect numeric values
+    // Instead, you could implement a proper text notification system here
+    // For now, just log the error without visual feedback
+  }
+});
+     
+

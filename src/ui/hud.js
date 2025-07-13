@@ -18,15 +18,21 @@ export function drawHealthBars() {
   Object.entries(players).forEach(([id, player]) => {
     if (!player || player.isDead) return;
 
-    // Use display position if available (from rendering), otherwise calculate from actual position
+    // Use render position if available (from interpolation), otherwise use actual position
     let screenX, screenY;
-    if (player.displayX !== undefined && player.displayY !== undefined) {
-      screenX = player.displayX;
-      screenY = player.displayY;
+    if (player.renderX !== undefined && player.renderY !== undefined) {
+      // Use interpolated render position for smooth health bar movement
+      screenX = player.renderX - camera.x;
+      screenY = player.renderY - camera.y;
     } else {
+      // Fallback to actual position
       screenX = player.x - camera.x;
       screenY = player.y - camera.y;
     }
+
+    // Store display position for collision debug alignment
+    player.displayX = screenX;
+    player.displayY = screenY;
 
     // Skip if player doesn't have health
     if (typeof player.health === "undefined") return;

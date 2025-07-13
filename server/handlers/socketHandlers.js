@@ -1,3 +1,5 @@
+import { validateWallPlacement, validateSpikeePlacement, checkPlacementRateLimit } from "../utils/validation.js";
+
 /**
  * Registers socket.io event handlers to manage multiplayer game state, player actions, and world object interactions.
  *
@@ -353,37 +355,53 @@ export function setupSocketHandlers(
       }
     });
 
-    // Update the placeWall handler
+    // Update the placeWall handler with validation
     socket.on("placeWall", (position) => {
       const player = players[socket.id];
       if (!player || player.isDead) return;
 
-      // Validate position is within world bounds
-      if (
-        position.x < 0 ||
-        position.x > gameConfig.worldWidth ||
-        position.y < 0 ||
-        position.y > gameConfig.worldHeight
-      )
+      // Rate limiting check
+      const rateLimitResult = checkPlacementRateLimit(socket.id, 'wall');
+      if (!rateLimitResult.success) {
+        socket.emit("placementError", { error: rateLimitResult.error });
         return;
+      }
 
-      // Check if position is valid
-      if (!isValidWallPlacement(position.x, position.y)) return;
+      // Comprehensive server-side validation
+      const validation = validateWallPlacement(
+        player, 
+        position, 
+        walls, 
+        spikes, 
+        trees, 
+        stones, 
+        gameConfig, 
+        gameItems
+      );
 
-      // Find wall in inventory
+      if (!validation.success) {
+        socket.emit("placementError", { error: validation.error });
+        return;
+      }
+
+      // Find wall in inventory (double-check after validation)
       const wallSlot = player.inventory.slots.findIndex(
         (item) => item?.id === "wall"
       );
-      if (wallSlot === -1) return;
+      if (wallSlot === -1) {
+        socket.emit("placementError", { error: "No wall found in inventory" });
+        return;
+      }
 
-      // Add wall to world with health
+      // Create wall with validated position
       const wall = {
-        x: position.x,
-        y: position.y,
+        x: Math.round(position.x), // Round to prevent floating point exploits
+        y: Math.round(position.y),
         radius: gameConfig.collision.sizes.wall,
         rotation: position.rotation || 0,
         playerId: socket.id,
-        health: gameItems.wall.maxHealth, // Add initial health
+        health: gameItems.wall.maxHealth,
+        timestamp: Date.now(), // Add timestamp for tracking
       };
 
       walls.push(wall);
@@ -399,41 +417,57 @@ export function setupSocketHandlers(
       broadcastInventoryUpdate(socket.id);
     });
 
-    // Add spike placement handler
+    // Update spike placement handler with validation
     socket.on("placeSpike", (position) => {
       const player = players[socket.id];
       if (!player || player.isDead) return;
 
-      // Validate position is within world bounds
-      if (
-        position.x < 0 ||
-        position.x > gameConfig.worldWidth ||
-        position.y < 0 ||
-        position.y > gameConfig.worldHeight
-      )
+      // Rate limiting check
+      const rateLimitResult = checkPlacementRateLimit(socket.id, 'spike');
+      if (!rateLimitResult.success) {
+        socket.emit("placementError", { error: rateLimitResult.error });
         return;
+      }
 
-      // Check if position is valid
-      if (!isValidSpikePosition(position.x, position.y)) return;
+      // Comprehensive server-side validation
+      const validation = validateSpikeePlacement(
+        player, 
+        position, 
+        spikes, 
+        walls, 
+        trees, 
+        stones, 
+        gameConfig, 
+        gameItems
+      );
 
-      // Find spike in inventory
+      if (!validation.success) {
+        socket.emit("placementError", { error: validation.error });
+        return;
+      }
+
+      // Find spike in inventory (double-check after validation)
       const spikeSlot = player.inventory.slots.findIndex(
         (item) => item?.id === "spike"
       );
-      if (spikeSlot === -1) return;
+      if (spikeSlot === -1) {
+        socket.emit("placementError", { error: "No spike found in inventory" });
+        return;
+      }
 
-      // Add spike to world with health
+      // Create spike with validated position
       const spike = {
         id: `spike-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: "spike",
-        x: position.x,
-        y: position.y,
+        x: Math.round(position.x), // Round to prevent floating point exploits
+        y: Math.round(position.y),
         radius: gameConfig.collision.sizes.spike,
         rotation: position.rotation || 0,
         playerId: socket.id,
-        health: gameItems.spike.maxHealth, // Add initial health
-        damage: gameItems.spike.damage, // Add damage property
-        lastDamageTime: 0, // Track when spike last damaged a player
+        health: gameItems.spike.maxHealth,
+        damage: gameItems.spike.damage,
+        lastDamageTime: 0,
+        timestamp: Date.now(), // Add timestamp for tracking
       };
 
       spikes.push(spike);
