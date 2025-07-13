@@ -19,7 +19,7 @@ import {
   isValidWallPlacement,
   isValidSpikePosition,
 } from "./server/utils/collision.js";
-import { processAttack } from "./server/controllers/combat.js";
+import { processAttack, processStaticObjectDamage } from "./server/controllers/combat.js";
 import { setupSocketHandlers } from "./server/handlers/socketHandlers.js";
 import { setupLiveReload } from "./server/utils/devUtils.js";
 
@@ -96,6 +96,8 @@ const gameFunctions = {
           stones
         )
     ),
+  processStaticObjectDamage: (attackerId, weapon, walls, spikes, gameConfig, io) =>
+    processStaticObjectDamage(attackerId, weapon, walls, spikes, gameConfig, io),
   isValidWallPlacement: (x, y) =>
     isValidWallPlacement(x, y, walls, trees, stones, spikes, gameConfig),
   isValidSpikePosition: (x, y) =>

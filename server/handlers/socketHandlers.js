@@ -1,4 +1,5 @@
 import { validateWallPlacement, validateSpikeePlacement, checkPlacementRateLimit } from "../utils/validation.js";
+import { recordPlayerPosition, validateAttackWithLagCompensation, cleanupPlayerHistory } from "../utils/lagCompensation.js";
 
 /**
  * Registers socket.io event handlers to manage multiplayer game state, player actions, and world object interactions.
@@ -30,7 +31,7 @@ export function setupSocketHandlers(
   io.on("connection", (socket) => {
     const spawnPos = findValidSpawnPosition();
 
-    // Initialize player with health, inventory and velocity
+    // Initialize player with health, inventory, velocity and ping tracking
     players[socket.id] = {
       x: spawnPos.x,
       y: spawnPos.y,
@@ -44,6 +45,8 @@ export function setupSocketHandlers(
       },
       attacking: false,
       velocity: { x: 0, y: 0 }, // Add velocity
+      ping: 0, // Track player ping
+      lastPingTime: Date.now()
     };
 
     // Give starting items
@@ -86,6 +89,20 @@ export function setupSocketHandlers(
       health: gameConfig.player.health.max,
       maxHealth: gameConfig.player.health.max,
       inventory: players[socket.id].inventory,
+    });
+
+    // Ping measurement
+    const pingInterval = setInterval(() => {
+      const pingStart = Date.now();
+      socket.emit("ping", pingStart);
+    }, 2000); // Ping every 2 seconds
+
+    socket.on("pong", (pingStart) => {
+      const player = players[socket.id];
+      if (player) {
+        player.ping = Date.now() - pingStart;
+        player.lastPingTime = Date.now();
+      }
     });
 
     socket.on("playerMovement", (movement) => {
@@ -142,6 +159,9 @@ export function setupSocketHandlers(
           // Validate position is within world bounds
           player.x = Math.max(0, Math.min(gameConfig.worldWidth, player.x));
           player.y = Math.max(0, Math.min(gameConfig.worldHeight, player.y));
+
+          // Record position for lag compensation
+          recordPlayerPosition(socket.id, player.x, player.y, player.rotation, movement.timestamp || Date.now());
 
           // Send confirmation back to client if this was a predicted movement
           if (movement.sequence !== undefined) {
@@ -323,6 +343,8 @@ export function setupSocketHandlers(
     });
 
     socket.on("disconnect", () => {
+      clearInterval(pingInterval);
+      cleanupPlayerHistory(socket.id);
       console.log("Player disconnected:", socket.id);
       delete players[socket.id];
       io.emit("playerDisconnected", socket.id);
@@ -539,4 +561,54 @@ export function setupSocketHandlers(
       }
     });
   });
+}
+
+/**
+ * Process attack with lag compensation
+ */
+function processAttackWithLagCompensation(attackerId, attackTime, players, walls, spikes, gameConfig, gameItems, io) {
+  const attacker = players[attackerId];
+  if (!attacker) return;
+
+  const activeSlot = attacker.inventory.activeSlot;
+  const weapon = attacker.inventory.slots[activeSlot];
+
+  if (!weapon || weapon.id !== "hammer") return;
+
+  // Process hits on other players with lag compensation
+  Object.entries(players).forEach(([targetId, target]) => {
+    if (targetId === attackerId || !target || target.isDead) return;
+
+    // Validate attack with lag compensation
+    const validation = validateAttackWithLagCompensation(
+      attackerId,
+      targetId,
+      attackTime,
+      attacker.ping || 0,
+      players,
+      weapon,
+      gameConfig
+    );
+
+    if (validation.valid) {
+      // Apply damage using the compensated hit
+      gameFunctions.damagePlayer(targetId, weapon.damage || 15, attacker);
+      
+      io.emit("playerHit", {
+        attackerId: attackerId,
+        targetId: targetId,
+        damage: weapon.damage || 15,
+        lagCompensated: true,
+        compensationMs: validation.compensationTime
+      });
+
+      // Optional: Send debug info about lag compensation
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Lag compensated hit: ${attackerId} -> ${targetId}, ping: ${attacker.ping}ms, compensation: ${validation.compensationTime}ms`);
+      }
+    }
+  });
+
+  // Process damage to walls and spikes (no lag compensation needed for static objects)
+  gameFunctions.processStaticObjectDamage(attackerId, weapon, walls, spikes, gameConfig, io);
 }

@@ -29,69 +29,6 @@ export function processAttack(
   const startAngle = playerAngle - arcAngle / 2;
   const endAngle = playerAngle + arcAngle / 2;
 
-  // Extract shared damage processing logic
-  function processDamageToEntity(
-    entities,
-    entityType,
-    attacker,
-    attackRange,
-    arcAngle,
-    playerAngle,
-    weapon,
-    gameConfig,
-    io
-  ) {
-    for (let index = entities.length - 1; index >= 0; index--) {
-      const entity = entities[index];
-      const dx = entity.x - attacker.x;
-      const dy = entity.y - attacker.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      if (distance <= attackRange + gameConfig.collision.sizes[entityType]) {
-        const angleToEntity = Math.atan2(dy, dx);
-        const angleDiff = Math.abs(normalizeAngle(angleToEntity - playerAngle));
-
-        if (angleDiff <= arcAngle / 2) {
-          entity.health -= weapon.damage || 15;
-
-          if (entity.health <= 0) {
-            entities.splice(index, 1);
-            io.emit(`${entityType}Destroyed`, { x: entity.x, y: entity.y });
-          } else {
-            io.emit(`${entityType}Damaged`, {
-              x: entity.x,
-              y: entity.y,
-              health: entity.health,
-            });
-          }
-        }
-      }
-    }
-  }
-  // Process damage to destructible entities
-  processDamageToEntity(
-    walls,
-    "wall",
-    attacker,
-    attackRange,
-    arcAngle,
-    playerAngle,
-    weapon,
-    gameConfig,
-    io
-  );
-  processDamageToEntity(
-    spikes,
-    "spike",
-    attacker,
-    attackRange,
-    arcAngle,
-    playerAngle,
-    weapon,
-    gameConfig,
-    io
-  );
-
   Object.entries(players).forEach(([targetId, target]) => {
     if (targetId === attackerId) return;
 
@@ -149,6 +86,44 @@ export function processAttack(
 }
 
 /**
+ * Process damage to static objects (walls, spikes) - no lag compensation needed
+ */
+export function processStaticObjectDamage(attackerId, weapon, walls, spikes, gameConfig, io) {
+  const attacker = players[attackerId];
+  if (!attacker) return;
+
+  const attackRange = weapon.range || 120;
+  const arcAngle = Math.PI / 1.5; // 120 degrees
+  const playerAngle = attacker.rotation + Math.PI / 2;
+
+  // Process damage to walls
+  processDamageToEntity(
+    walls,
+    "wall",
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  );
+
+  // Process damage to spikes
+  processDamageToEntity(
+    spikes,
+    "spike",
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  );
+}
+
+/**
  * Normalizes an angle to the range [-π, π].
  * @param {number} angle - The angle in radians to normalize.
  * @return {number} The normalized angle within [-π, π].
@@ -157,4 +132,46 @@ export function normalizeAngle(angle) {
   while (angle > Math.PI) angle -= 2 * Math.PI;
   while (angle < -Math.PI) angle += 2 * Math.PI;
   return angle;
+}
+
+/**
+ * Extracts shared damage processing logic for entities like walls and spikes.
+ */
+function processDamageToEntity(
+  entities,
+  entityType,
+  attacker,
+  attackRange,
+  arcAngle,
+  playerAngle,
+  weapon,
+  gameConfig,
+  io
+) {
+  for (let index = entities.length - 1; index >= 0; index--) {
+    const entity = entities[index];
+    const dx = entity.x - attacker.x;
+    const dy = entity.y - attacker.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= attackRange + gameConfig.collision.sizes[entityType]) {
+      const angleToEntity = Math.atan2(dy, dx);
+      const angleDiff = Math.abs(normalizeAngle(angleToEntity - playerAngle));
+
+      if (angleDiff <= arcAngle / 2) {
+        entity.health -= weapon.damage || 15;
+
+        if (entity.health <= 0) {
+          entities.splice(index, 1);
+          io.emit(`${entityType}Destroyed`, { x: entity.x, y: entity.y });
+        } else {
+          io.emit(`${entityType}Damaged`, {
+            x: entity.x,
+            y: entity.y,
+            health: entity.health,
+          });
+        }
+      }
+    }
+  }
 }

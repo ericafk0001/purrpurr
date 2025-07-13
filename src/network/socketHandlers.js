@@ -424,5 +424,10 @@ socket.on("placementError", (data) => {
     // For now, just log the error without visual feedback
   }
 });
-     
+
+// Add ping handling
+socket.on("ping", (timestamp) => {
+  socket.emit("pong", timestamp);
+});
+
 
