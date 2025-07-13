@@ -18,6 +18,11 @@ export function drawPlayer(player) {
   const screenX = x - camera.x;
   const screenY = y - camera.y;
 
+  // Store the EXACT render position of the sprite for UI alignment (for ALL players)
+  player.spriteX = screenX;
+  player.spriteY = screenY;
+  player.spriteRotation = rotation;
+
   // Store render position for collision debug and health bar alignment
   player.displayX = screenX;
   player.displayY = screenY;

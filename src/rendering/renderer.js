@@ -55,7 +55,7 @@ export function drawPlayers(interpolation = 1) {
     ...Object.entries(players).map(([id, player]) => {
       if (player === myPlayer) {
         // Local player uses immediate position
-        return {
+        const playerData = {
           ...player,
           renderX: player.x,
           renderY: player.y,
@@ -63,9 +63,19 @@ export function drawPlayers(interpolation = 1) {
           id: id,
           type: "player",
         };
+        // Set renderX/Y on the actual player object for health bar access
+        player.renderX = player.x;
+        player.renderY = player.y;
+        player.renderRotation = player.rotation;
+        return playerData;
       } else {
-        // Other players: calculate interpolated render position but don't modify actual position
+        // Other players: calculate interpolated render position
         const interpolatedPos = getInterpolatedPosition(player);
+        
+        // Set interpolated values on the actual player object for health bar access
+        player.renderX = interpolatedPos.x;
+        player.renderY = interpolatedPos.y;
+        player.renderRotation = interpolatedPos.rotation;
         
         return {
           ...player,
@@ -168,12 +178,12 @@ export function drawBackground() {
 function getInterpolatedPosition(player) {
   const now = Date.now();
   
-  // Adaptive interpolation delay based on network conditions
-  const baseDelay = 150; // Increased from 100ms for better network tolerance
-  const maxDelay = 300;  // Maximum delay for poor connections
+  // Reduce interpolation delay for more responsive movement
+  const baseDelay = 80; // Reduced from 150ms
+  const maxDelay = 200;  // Reduced from 300ms
   
   // Calculate average time between position updates to adapt to network conditions
-  let avgTimeDelta = 100; // Default assumption
+  let avgTimeDelta = 80; // Default assumption
   if (player.positionHistory && player.positionHistory.length >= 3) {
     const recent = player.positionHistory.slice(-3);
     const deltas = [];
@@ -183,12 +193,11 @@ function getInterpolatedPosition(player) {
     avgTimeDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
   }
   
-  // Adaptive delay: use longer delay for higher latency
-  const adaptiveDelay = Math.min(maxDelay, Math.max(baseDelay, avgTimeDelta * 1.5));
+  // More aggressive adaptive delay for better responsiveness
+  const adaptiveDelay = Math.min(maxDelay, Math.max(baseDelay, avgTimeDelta * 1.2));
   const targetTime = now - adaptiveDelay;
 
   if (!player.positionHistory || player.positionHistory.length < 2) {
-    // Fallback to current position if no history
     return {
       x: player.x || 0,
       y: player.y || 0,
@@ -196,18 +205,28 @@ function getInterpolatedPosition(player) {
     };
   }
 
-  // Clean old history to prevent memory bloat and improve performance
-  const cutoffTime = now - 1000; // Keep only last 1 second of history
+  // Clean old history more aggressively
+  const cutoffTime = now - 500; // Keep only last 500ms of history
   player.positionHistory = player.positionHistory.filter(pos => pos.timestamp > cutoffTime);
 
-  // Find two positions to interpolate between with better tolerance
+  if (player.positionHistory.length < 2) {
+    return {
+      x: player.x || 0,
+      y: player.y || 0,
+      rotation: player.rotation || 0,
+    };
+  }
+
+  // Find interpolation points with improved logic
   let before = null;
   let after = null;
 
-  // Look for the best interpolation points
-  for (let i = player.positionHistory.length - 2; i >= 0; i--) {
-    const current = player.positionHistory[i];
-    const next = player.positionHistory[i + 1];
+  // Sort by timestamp to ensure proper ordering
+  const sortedHistory = [...player.positionHistory].sort((a, b) => a.timestamp - b.timestamp);
+
+  for (let i = 0; i < sortedHistory.length - 1; i++) {
+    const current = sortedHistory[i];
+    const next = sortedHistory[i + 1];
 
     if (current.timestamp <= targetTime && next.timestamp >= targetTime) {
       before = current;
@@ -216,24 +235,33 @@ function getInterpolatedPosition(player) {
     }
   }
 
-  // Fallback strategies for poor network conditions
+  // Improved fallback strategy
   if (!before || !after) {
-    // Try to find closest available positions
-    if (player.positionHistory.length >= 2) {
-      const sortedByTime = [...player.positionHistory].sort((a, b) => Math.abs(a.timestamp - targetTime) - Math.abs(b.timestamp - targetTime));
-      before = sortedByTime[0];
-      after = sortedByTime[1];
+    // Use the two most recent positions for extrapolation
+    if (sortedHistory.length >= 2) {
+      before = sortedHistory[sortedHistory.length - 2];
+      after = sortedHistory[sortedHistory.length - 1];
       
-      // Ensure proper ordering
-      if (before.timestamp > after.timestamp) {
-        [before, after] = [after, before];
+      // Allow limited extrapolation for smoother movement
+      const timeDiff = after.timestamp - before.timestamp;
+      const extrapolationTime = targetTime - after.timestamp;
+      
+      if (extrapolationTime > 0 && extrapolationTime < timeDiff * 0.5) {
+        // Safe extrapolation - extend the trend slightly
+        const extrapolationFactor = extrapolationTime / timeDiff;
+        const velocityX = (after.x - before.x) / timeDiff;
+        const velocityY = (after.y - before.y) / timeDiff;
+        
+        return {
+          x: after.x + velocityX * extrapolationTime,
+          y: after.y + velocityY * extrapolationTime,
+          rotation: after.rotation,
+        };
       }
     }
-  }
-
-  // Final fallback to most recent position
-  if (!before || !after) {
-    const latest = player.positionHistory[player.positionHistory.length - 1];
+    
+    // Final fallback to most recent position
+    const latest = sortedHistory[sortedHistory.length - 1];
     return {
       x: latest?.x || player.x,
       y: latest?.y || player.y,
@@ -241,37 +269,37 @@ function getInterpolatedPosition(player) {
     };
   }
 
-  // Calculate interpolation factor with bounds checking
+  // Calculate interpolation factor
   const timeDiff = after.timestamp - before.timestamp;
   const targetDiff = targetTime - before.timestamp;
   let factor = timeDiff > 0 ? targetDiff / timeDiff : 0;
   
-  // Clamp factor to prevent extrapolation beyond reasonable bounds
-  factor = Math.min(1.2, Math.max(-0.2, factor)); // Allow slight extrapolation
+  // Allow slight extrapolation but clamp to reasonable bounds
+  factor = Math.min(1.1, Math.max(-0.1, factor));
 
-  // Smooth factor to reduce jitter
-  const smoothedFactor = factor; // Could add easing here if needed
+  // Apply easing for smoother movement
+  const easedFactor = easeInOutCubic(Math.max(0, Math.min(1, factor)));
 
-  // Interpolate position with distance-based validation
-  const interpolatedX = before.x + (after.x - before.x) * smoothedFactor;
-  const interpolatedY = before.y + (after.y - before.y) * smoothedFactor;
+  // Interpolate position
+  const interpolatedX = before.x + (after.x - before.x) * easedFactor;
+  const interpolatedY = before.y + (after.y - before.y) * easedFactor;
 
-  // Validate interpolated position isn't too far from actual position (anti-teleport)
+  // Validate interpolated position isn't too far from actual (reduced threshold)
   const distanceFromActual = Math.sqrt(
     Math.pow(interpolatedX - player.x, 2) + Math.pow(interpolatedY - player.y, 2)
   );
   
-  // If interpolated position is too far from actual, gradually move towards actual
-  if (distanceFromActual > 200) { // 200px threshold
-    const blendFactor = 0.1; // 10% blend towards actual position
+  // Reduce correction threshold for smoother movement
+  if (distanceFromActual > 100) { // Reduced from 200px
+    const blendFactor = 0.05; // Reduced from 0.1 for gentler correction
     return {
       x: interpolatedX * (1 - blendFactor) + player.x * blendFactor,
       y: interpolatedY * (1 - blendFactor) + player.y * blendFactor,
-      rotation: player.rotation, // Use actual rotation when correcting
+      rotation: player.rotation,
     };
   }
 
-  // Interpolate rotation with improved angle wrapping
+  // Improved rotation interpolation
   let rotationDiff = after.rotation - before.rotation;
   
   // Handle angle wrapping more smoothly
@@ -281,12 +309,19 @@ function getInterpolatedPosition(player) {
     rotationDiff += 2 * Math.PI;
   }
 
-  const interpolatedRotation = before.rotation + rotationDiff * smoothedFactor;
+  const interpolatedRotation = before.rotation + rotationDiff * easedFactor;
 
   return {
     x: interpolatedX,
     y: interpolatedY,
     rotation: interpolatedRotation,
   };
+}
+
+/**
+ * Easing function for smoother interpolation
+ */
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 

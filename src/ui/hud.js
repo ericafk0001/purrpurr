@@ -18,14 +18,14 @@ export function drawHealthBars() {
   Object.entries(players).forEach(([id, player]) => {
     if (!player || player.isDead) return;
 
-    // Use render position if available (from interpolation), otherwise use actual position
+    // Use the same interpolated positions that the player sprite uses for smooth movement
     let screenX, screenY;
     if (player.renderX !== undefined && player.renderY !== undefined) {
       // Use interpolated render position for smooth health bar movement
       screenX = player.renderX - camera.x;
       screenY = player.renderY - camera.y;
     } else {
-      // Fallback to actual position
+      // Fallback to actual position (for local player or when no interpolation data)
       screenX = player.x - camera.x;
       screenY = player.y - camera.y;
     }
@@ -180,3 +180,4 @@ export function hideDeathScreen() {
     document.body.removeChild(deathScreen);
   }
 }
+  

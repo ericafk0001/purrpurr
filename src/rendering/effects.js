@@ -105,21 +105,13 @@ export function drawCollisionCircles() {
   ctx.strokeStyle = config.collision.debugColor;
   ctx.lineWidth = 2;
 
-  // Draw player collision circles
+  // Draw player collision circles using ACTUAL positions for accuracy
   Object.entries(players).forEach(([id, player]) => {
     if (!player) return;
 
-    // Use render position if available (from interpolation), otherwise use actual position
-    let screenX, screenY;
-    if (player.renderX !== undefined && player.renderY !== undefined) {
-      // Use interpolated render position for smooth collision circle movement
-      screenX = player.renderX - camera.x;
-      screenY = player.renderY - camera.y;
-    } else {
-      // Fallback to actual position
-      screenX = player.x - camera.x;
-      screenY = player.y - camera.y;
-    }
+    // Always use actual position for collision debug - this shows true collision area
+    const screenX = player.x - camera.x;
+    const screenY = player.y - camera.y;
 
     ctx.beginPath();
     ctx.arc(screenX, screenY, config.collision.sizes.player, 0, Math.PI * 2);
@@ -244,6 +236,4 @@ export function drawCollisionCircles() {
       }
     });
   }
-
-  ctx.restore();
 }
