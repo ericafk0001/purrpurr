@@ -34,11 +34,19 @@ export let lastServerSync = Date.now();
 export let needsPositionReconciliation = false;
 export let correctedPosition = null;
 
+// Input throttling for high refresh rate monitors
+let lastInputSampleTime = 0;
+const INPUT_SAMPLE_RATE = 1000 / 120; // Sample inputs at max 120Hz even on 240Hz+ monitors
+
 // Client-side prediction variables
 let movementSequence = 0;
 let movementHistory = [];
 let lastServerSequence = -1;
 const MAX_MOVEMENT_HISTORY = 100;
+
+// Network sync throttling
+let lastNetworkUpdate = 0;
+const NETWORK_UPDATE_RATE = 1000 / 20; // Send updates at 20Hz max
 
 // Store predicted state
 let predictedPosition = { x: 0, y: 0, rotation: 0 };
@@ -104,7 +112,7 @@ function applyMovementDelta(deltaTime, dx, dy) {
 }
 
 /**
- * Updates the player's position each frame based on input, velocity, and collision resolution.
+ * Updates the player's position with frame-rate independent movement.
  *
  * Applies server reconciliation if required, processes input for movement, integrates velocity with decay, and resolves collisions with players, walls, and spikes. Ensures the player's position remains within world bounds and sends the updated movement state to the server.
  *
@@ -113,17 +121,17 @@ function applyMovementDelta(deltaTime, dx, dy) {
 export function updatePosition(deltaTime) {
   if (!myPlayer) return;
 
+  // Throttle input sampling for high refresh rate monitors
+  const now = performance.now();
+  const shouldSampleInput = now - lastInputSampleTime >= INPUT_SAMPLE_RATE;
+  
   // Handle position correction from server
   if (needsPositionReconciliation && correctedPosition) {
-    // Server correction - reconcile with prediction
     const serverSequence = correctedPosition.sequence || lastServerSequence;
-
-    // Set to server position
     myPlayer.x = correctedPosition.x;
     myPlayer.y = correctedPosition.y;
     myPlayer.rotation = correctedPosition.rotation;
 
-    // Re-apply movements that happened after this server update
     if (serverSequence >= 0) {
       reapplyMovements(serverSequence);
       lastServerSequence = serverSequence;
@@ -134,131 +142,126 @@ export function updatePosition(deltaTime) {
     return;
   }
 
-  // Don't allow movement if dead
   if (myPlayer.isDead) return;
 
-  // Apply velocity with deltaTime for frame-rate independence and boundary checks
+  // Apply velocity with frame-rate independent physics
   if (myPlayer.velocity) {
-    const newX = myPlayer.x + myPlayer.velocity.x * deltaTime;
-    const newY = myPlayer.y + myPlayer.velocity.y * deltaTime;
+    // Use fixed timestep for velocity application
+    const velocityDelta = deltaTime;
+    const newX = myPlayer.x + myPlayer.velocity.x * velocityDelta;
+    const newY = myPlayer.y + myPlayer.velocity.y * velocityDelta;
 
-    // Clamp position within world bounds
     myPlayer.x = clampWithEasing(newX, 0, config.worldWidth);
     myPlayer.y = clampWithEasing(newY, 0, config.worldHeight);
 
-    // Apply velocity decay
-    const decayFactor = Math.pow(0.9, deltaTime * 60); // Scale decay to frame time
+    // Apply velocity decay with frame-rate independent decay
+    const decayFactor = Math.pow(0.9, deltaTime * 60);
     myPlayer.velocity.x *= decayFactor;
     myPlayer.velocity.y *= decayFactor;
 
-    // Zero out small velocities
     if (Math.abs(myPlayer.velocity.x) < 0.1) myPlayer.velocity.x = 0;
     if (Math.abs(myPlayer.velocity.y) < 0.1) myPlayer.velocity.y = 0;
 
-    // IMPORTANT: Resolve collisions after velocity movement
     resolvePlayerCollisions();
     resolveCollisionPenetration();
     resolveWallCollisions();
     resolveSpikeCollisions();
   }
 
+  // Sample input at controlled rate to prevent oversampling
   let dx = 0;
   let dy = 0;
 
-  // Use different input source based on device type
-  const activeKeys = isMobileDevice ? getVirtualKeys() : keys;
+  if (shouldSampleInput) {
+    lastInputSampleTime = now;
+    
+    const activeKeys = isMobileDevice ? getVirtualKeys() : keys;
 
-  if (activeKeys.w && myPlayer.y > 0) dy -= 1;
-  if (activeKeys.s && myPlayer.y < config.worldHeight) dy += 1;
-  if (activeKeys.a && myPlayer.x > 0) dx -= 1;
-  if (activeKeys.d && myPlayer.x < config.worldWidth) dx += 1;
+    if (activeKeys.w && myPlayer.y > 0) dy -= 1;
+    if (activeKeys.s && myPlayer.y < config.worldHeight) dy += 1;
+    if (activeKeys.a && myPlayer.x > 0) dx -= 1;
+    if (activeKeys.d && myPlayer.x < config.worldWidth) dx += 1;
 
-  // normalize diagonal movement
-  if (dx !== 0 && dy !== 0) {
-    const normalizer = 1 / Math.sqrt(2);
-    dx *= normalizer;
-    dy *= normalizer;
+    // Normalize diagonal movement
+    if (dx !== 0 && dy !== 0) {
+      const normalizer = 1 / Math.sqrt(2);
+      dx *= normalizer;
+      dy *= normalizer;
+    }
   }
 
   // Apply movement restriction if active
   if (myPlayer.movementRestriction && myPlayer.movementRestriction.active) {
     const restriction = myPlayer.movementRestriction;
-    const now = Date.now();
-    const elapsed = now - restriction.startTime;
+    const restrictionElapsed = now - restriction.startTime;
     const restrictionConfig = config.player.knockback.movementRestriction;
 
-    if (elapsed < restrictionConfig.duration) {
-      // Only apply restriction if player is actually trying to move
+    if (restrictionElapsed < restrictionConfig.duration) {
       if (dx !== 0 || dy !== 0) {
-        // Calculate movement direction relative to knockback direction
         const moveAngle = Math.atan2(dy, dx);
         const knockbackAngle = restriction.knockbackDirection;
 
-        // Calculate angle difference (shortest path)
         let angleDiff = moveAngle - knockbackAngle;
         while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
         while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
         const absAngleDiff = Math.abs(angleDiff);
-
-        // Determine movement penalty based on direction
         let speedMultiplier = 1.0;
 
         if (absAngleDiff < Math.PI / 3) {
-          // Moving in knockback direction (60 degree cone) - heavily penalized
           speedMultiplier = restrictionConfig.directionPenalty;
         } else if (absAngleDiff > (2 * Math.PI) / 3) {
-          // Moving opposite to knockback (60 degree cone) - bonus speed
           speedMultiplier = restrictionConfig.oppositeMovementBonus;
         } else {
-          // Moving perpendicular to knockback - moderate penalty
           speedMultiplier = restrictionConfig.sideMovementPenalty;
         }
 
-        // Apply fade out effect if enabled
         if (restrictionConfig.fadeOut) {
-          const fadeProgress = elapsed / restrictionConfig.duration;
-          // Smoothly interpolate back to normal speed
-          const fadeFactor = 1 - Math.pow(1 - fadeProgress, 2); // Ease-out curve
+          const fadeProgress = restrictionElapsed / restrictionConfig.duration;
+          const fadeFactor = 1 - Math.pow(1 - fadeProgress, 2);
           speedMultiplier = speedMultiplier + (1 - speedMultiplier) * fadeFactor;
         }
 
-        // Apply the restriction
         dx *= speedMultiplier;
         dy *= speedMultiplier;
       }
     } else {
-      // Restriction expired, remove it
       myPlayer.movementRestriction.active = false;
     }
   }
 
-  // Scale movement by deltaTime for frame-rate independence
-  dx *= config.moveSpeed * deltaTime;
-  dy *= config.moveSpeed * deltaTime;
+  // Apply frame-rate independent movement scaling
+  // Use EXACTLY the same speed regardless of FPS
+  const moveSpeedPerSecond = config.moveSpeed;
+  dx *= moveSpeedPerSecond * deltaTime;
+  dy *= moveSpeedPerSecond * deltaTime;
 
   // Apply movement restriction multiplier
   const speedMultiplier = getMovementSpeedMultiplier();
   dx *= speedMultiplier;
   dy *= speedMultiplier;
 
-  const { dx: slidingDx, dy: slidingDy } = handleCollisions(dx, dy);
-
-  const newX = myPlayer.x + slidingDx;
-  const newY = myPlayer.y + slidingDy;
-
-  if (newX > 0 && newX < config.worldWidth) myPlayer.x = newX;
-  if (newY > 0 && newY < config.worldHeight) myPlayer.y = newY;
-  
-  // Only resolve collisions again if there was actual movement input
+  // Apply movement if there's any input
   if (dx !== 0 || dy !== 0) {
+    const { dx: slidingDx, dy: slidingDy } = handleCollisions(dx, dy);
+
+    const newX = myPlayer.x + slidingDx;
+    const newY = myPlayer.y + slidingDy;
+
+    if (newX > 0 && newX < config.worldWidth) myPlayer.x = newX;
+    if (newY > 0 && newY < config.worldHeight) myPlayer.y = newY;
+
     resolvePlayerCollisions();
     resolveCollisionPenetration();
     resolveWallCollisions();
     resolveSpikeCollisions();
   }
 
-  sendPlayerMovement();
+  // Throttle network updates to prevent spam on high FPS
+  if (now - lastNetworkUpdate >= NETWORK_UPDATE_RATE) {
+    lastNetworkUpdate = now;
+    sendPlayerMovement();
+  }
 }
 
 /**

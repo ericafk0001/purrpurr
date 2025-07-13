@@ -22,6 +22,7 @@ export let currentFps = 0;
 export let lastFpsUpdate = 0;
 export const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
 export const FIXED_TIMESTEP = 1000 / 60; // 16.67ms for 60 FPS physics
+export const MAX_FRAME_SKIP = 5; // Maximum physics updates per frame
 export let accumulatedTime = 0;
 export let lastUpdateTime = performance.now();
 
@@ -49,40 +50,50 @@ export function gameLoop(timestamp) {
   const currentTime = performance.now();
   let deltaTime = currentTime - lastUpdateTime;
 
-  // Cap deltaTime to avoid spiral of death
-  if (deltaTime > 200) {
-    deltaTime = 200;
+  // Cap deltaTime to prevent spiral of death
+  if (deltaTime > 250) {
+    deltaTime = 250;
   }
 
   // Accumulate time for fixed timestep updates
   accumulatedTime += deltaTime;
   lastUpdateTime = currentTime;
 
-  // Process game logic in fixed timestep increments
-  while (accumulatedTime >= FIXED_TIMESTEP) {
-    // Update game physics at fixed intervals
-    updateGameLogic(FIXED_TIMESTEP / 1000); // Convert ms to seconds for calculations
+  // Process game logic in fixed timestep increments with frame skip limit
+  let updateCount = 0;
+  while (accumulatedTime >= FIXED_TIMESTEP && updateCount < MAX_FRAME_SKIP) {
+    // Update game physics at exactly 60 FPS regardless of render FPS
+    updateGameLogic(FIXED_TIMESTEP); // Pass fixed timestep in milliseconds
     accumulatedTime -= FIXED_TIMESTEP;
+    updateCount++;
+  }
+
+  // If we hit the frame skip limit, reset accumulated time to prevent buildup
+  if (updateCount >= MAX_FRAME_SKIP) {
+    accumulatedTime = 0;
   }
 
   // Calculate interpolation fraction for rendering
-  const interpolation = accumulatedTime / FIXED_TIMESTEP;
+  const interpolation = Math.min(1, accumulatedTime / FIXED_TIMESTEP);
 
-  // Render at interpolated state
-  const cameraDeltaTime = frameDelta / 1000; // Convert ms to seconds
+  // Render at interpolated state with frame-rate independent camera
+  const cameraDeltaTime = Math.min(frameDelta, FIXED_TIMESTEP) / 1000; // Cap camera delta
   updateCamera(cameraDeltaTime);
   drawPlayers(interpolation);
   requestAnimationFrame(gameLoop);
 }
 
 /**
- * Advances the game state by a fixed timestep, updating player attack animations, auto-attack scheduling, movement, and rotation.
+ * Advances the game state by a fixed timestep, ensuring consistent physics regardless of FPS.
  *
  * Updates the local player's attack animation progress and handles state transitions, including auto-attack queuing based on weapon cooldowns. Iterates through all players to update their attack animation states. Applies movement and rotation updates for all players using the provided timestep.
- * @param {number} deltaTime - The fixed timestep duration in milliseconds for this update cycle.
+ * @param {number} fixedDeltaTime - The fixed timestep duration in milliseconds for this update cycle.
  */
-export function updateGameLogic(deltaTime) {
+export function updateGameLogic(fixedDeltaTime) {
   if (!myPlayer) return;
+
+  // Convert fixed timestep to seconds for calculations
+  const deltaTime = fixedDeltaTime / 1000;
 
   // Update attack animation for local player
   if (isAttacking && myPlayer) {
@@ -105,12 +116,8 @@ export function updateGameLogic(deltaTime) {
 
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-        // Get cooldown from the currently equipped weapon
-        const activeItem =
-          myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
-        const weaponCooldown = activeItem
-          ? items[activeItem.id]?.cooldown || 800
-          : 800;
+        const activeItem = myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
+        const weaponCooldown = activeItem ? items[activeItem.id]?.cooldown || 800 : 800;
         const cooldownRemaining = weaponCooldown - attackDuration;
         setTimeout(startAttack, Math.max(0, cooldownRemaining));
       }
@@ -123,17 +130,12 @@ export function updateGameLogic(deltaTime) {
     if (!player.attacking || !player.attackStartTime) return;
 
     const elapsed = animTime - player.attackStartTime;
-    // Get attack duration from player's weapon or use default
     const activeItem = player.inventory?.slots?.[player.inventory.activeSlot];
-    const attackDuration = activeItem
-      ? items[activeItem.id]?.useTime || 400
-      : 400;
+    const attackDuration = activeItem ? items[activeItem.id]?.useTime || 400 : 400;
 
-    // Update animation progress
     if (elapsed <= attackDuration) {
       player.attackProgress = Math.min(1, elapsed / attackDuration);
     } else {
-      // End animation
       player.attacking = false;
       player.attackProgress = 0;
       player.attackStartTime = null;
@@ -141,7 +143,7 @@ export function updateGameLogic(deltaTime) {
     }
   });
 
-  // Update player position and rotation with fixed timestep
+  // Update player position and rotation with FIXED timestep (always 1/60th second)
   updatePosition(deltaTime);
   updateRotation();
 }
