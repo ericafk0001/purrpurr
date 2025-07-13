@@ -126,24 +126,27 @@ socket.on("playerMoved", (playerInfo) => {
       player.positionHistory = [];
     }
 
-    // Only add to history if this is actually a new position update
+    // Enhanced position change detection for high FPS
     const lastPos = player.positionHistory[player.positionHistory.length - 1];
     const isNewPosition = !lastPos || 
-      Math.abs(lastPos.x - playerInfo.x) > 0.1 || 
-      Math.abs(lastPos.y - playerInfo.y) > 0.1 ||
-      Math.abs(lastPos.rotation - playerInfo.rotation) > 0.01;
+      Math.abs(lastPos.x - playerInfo.x) > 0.05 || // Reduced threshold
+      Math.abs(lastPos.y - playerInfo.y) > 0.05 ||
+      Math.abs(lastPos.rotation - playerInfo.rotation) > 0.005 ||
+      timestamp - lastPos.timestamp > 100; // Force update every 100ms
 
     if (isNewPosition) {
-      // Add new position to history with server timestamp if available, otherwise use local
+      // Add new position to history with high precision timestamps
       player.positionHistory.push({
         x: playerInfo.x,
         y: playerInfo.y,
         rotation: playerInfo.rotation,
-        timestamp: playerInfo.timestamp || timestamp // Prefer server timestamp
+        timestamp: playerInfo.timestamp || timestamp,
+        serverTime: playerInfo.timestamp, // Separate server timestamp
+        localTime: timestamp // Local timestamp for jitter calculation
       });
 
-      // Keep reasonable history size (increased for better interpolation)
-      if (player.positionHistory.length > 15) {
+      // Keep more history for high FPS interpolation
+      if (player.positionHistory.length > 20) {
         player.positionHistory.shift();
       }
     }
@@ -163,7 +166,6 @@ socket.on("playerMoved", (playerInfo) => {
       x: clampedX,
       y: clampedY,
       positionHistory: player.positionHistory,
-      // ...existing code for other properties...
     };
   }
 });
@@ -424,5 +426,5 @@ socket.on("placementError", (data) => {
     // For now, just log the error without visual feedback
   }
 });
-     
+
 
