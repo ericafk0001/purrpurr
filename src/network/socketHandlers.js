@@ -126,44 +126,83 @@ socket.on("playerMoved", (playerInfo) => {
       player.positionHistory = [];
     }
 
-    // Only add to history if this is actually a new position update
+    // Enhanced position change detection with better thresholds
     const lastPos = player.positionHistory[player.positionHistory.length - 1];
     const isNewPosition = !lastPos || 
-      Math.abs(lastPos.x - playerInfo.x) > 0.1 || 
-      Math.abs(lastPos.y - playerInfo.y) > 0.1 ||
-      Math.abs(lastPos.rotation - playerInfo.rotation) > 0.01;
+      Math.abs(lastPos.x - playerInfo.x) > 0.01 ||
+      Math.abs(lastPos.y - playerInfo.y) > 0.01 ||
+      Math.abs(lastPos.rotation - playerInfo.rotation) > 0.001 ||
+      timestamp - lastPos.timestamp > 40; // Force update every 40ms for smoother interpolation
 
     if (isNewPosition) {
-      // Add new position to history with server timestamp if available, otherwise use local
+      // Calculate velocity for better extrapolation
+      let velocityX = 0, velocityY = 0;
+      if (lastPos && timestamp - lastPos.timestamp > 0) {
+        const timeDelta = timestamp - lastPos.timestamp;
+        velocityX = (playerInfo.x - lastPos.x) / timeDelta * 1000; // pixels per second
+        velocityY = (playerInfo.y - lastPos.y) / timeDelta * 1000;
+      }
+
+      // Add high-precision position with velocity data
       player.positionHistory.push({
         x: playerInfo.x,
         y: playerInfo.y,
         rotation: playerInfo.rotation,
-        timestamp: playerInfo.timestamp || timestamp // Prefer server timestamp
+        timestamp: playerInfo.timestamp || timestamp,
+        serverTime: playerInfo.timestamp,
+        localTime: timestamp,
+        velocity: { x: velocityX, y: velocityY },
+        // Add movement smoothness indicators
+        speed: Math.sqrt(velocityX * velocityX + velocityY * velocityY),
+        deltaTime: lastPos ? timestamp - lastPos.timestamp : 0
       });
 
-      // Keep reasonable history size (increased for better interpolation)
-      if (player.positionHistory.length > 15) {
+      // Keep optimal history length for interpolation quality
+      if (player.positionHistory.length > 30) {
         player.positionHistory.shift();
       }
     }
 
-    // Update the actual player position
-    const clampedX = clampWithEasing(playerInfo.x, 0, config.worldWidth);
-    const clampedY = clampWithEasing(playerInfo.y, 0, config.worldHeight);
+    // Smooth position updates instead of snapping
+    const oldX = player.x;
+    const oldY = player.y;
+    const newX = clampWithEasing(playerInfo.x, 0, config.worldWidth);
+    const newY = clampWithEasing(playerInfo.y, 0, config.worldHeight);
     
-    player.x = clampedX;
-    player.y = clampedY;
+    // Apply position with micro-smoothing for ultra-smooth appearance
+    if (!player._smoothTransition) {
+      player._smoothTransition = { 
+        startX: oldX, startY: oldY, 
+        targetX: newX, targetY: newY, 
+        startTime: timestamp,
+        duration: 50 // 50ms smooth transition
+      };
+    } else {
+      // Update target if significantly different
+      const distance = Math.sqrt(Math.pow(newX - player._smoothTransition.targetX, 2) + Math.pow(newY - player._smoothTransition.targetY, 2));
+      if (distance > 1) {
+        player._smoothTransition = { 
+          startX: player.x, startY: player.y, 
+          targetX: newX, targetY: newY, 
+          startTime: timestamp,
+          duration: 30
+        };
+      }
+    }
+    
+    player.x = newX;
+    player.y = newY;
     player.rotation = playerInfo.rotation;
 
     // Update other properties
     players[playerInfo.id] = {
       ...players[playerInfo.id],
       ...playerInfo,
-      x: clampedX,
-      y: clampedY,
+      x: newX,
+      y: newY,
       positionHistory: player.positionHistory,
-      // ...existing code for other properties...
+      _predictedVelocity: player._predictedVelocity,
+      _smoothTransition: player._smoothTransition
     };
   }
 });
@@ -426,6 +465,9 @@ socket.on("placementError", (data) => {
 });
 
 // Add ping handling
+socket.on("ping", (timestamp) => {
+  socket.emit("pong", timestamp);
+});
 socket.on("ping", (timestamp) => {
   socket.emit("pong", timestamp);
 });

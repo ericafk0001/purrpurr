@@ -22,6 +22,7 @@ export let currentFps = 0;
 export let lastFpsUpdate = 0;
 export const FPS_UPDATE_INTERVAL = 500; // Update FPS every 500ms
 export const FIXED_TIMESTEP = 1000 / 60; // 16.67ms for 60 FPS physics
+export const MAX_FRAME_SKIP = 3; // Reduced from 5 to prevent accumulation
 export let accumulatedTime = 0;
 export let lastUpdateTime = performance.now();
 
@@ -49,21 +50,31 @@ export function gameLoop(timestamp) {
   const currentTime = performance.now();
   let deltaTime = currentTime - lastUpdateTime;
 
-  // Cap deltaTime to avoid spiral of death
-  if (deltaTime > 200) {
-    deltaTime = 200;
+  // Cap deltaTime to prevent spiral of death on high refresh rates
+  if (deltaTime > 100) {
+    deltaTime = 100;
   }
 
   // Accumulate time for fixed timestep updates
   accumulatedTime += deltaTime;
   lastUpdateTime = currentTime;
 
-  // Process game logic in fixed timestep increments
-  while (accumulatedTime >= FIXED_TIMESTEP) {
-    // Update game physics at fixed intervals
-    updateGameLogic(FIXED_TIMESTEP / 1000); // Convert ms to seconds for calculations
+  // Process game logic in fixed timestep increments with frame skip limit
+  let updateCount = 0;
+  while (accumulatedTime >= FIXED_TIMESTEP && updateCount < MAX_FRAME_SKIP) {
+    // Update game physics at exactly 60 FPS regardless of render FPS
+    updateGameLogic(FIXED_TIMESTEP / 1000); // Pass exactly 1/60th second
     accumulatedTime -= FIXED_TIMESTEP;
+    updateCount++;
   }
+
+  // If we hit the frame skip limit, reset accumulated time to prevent buildup
+  if (updateCount >= MAX_FRAME_SKIP) {
+    accumulatedTime = 0;
+  }
+
+  // Update smooth transitions for all players before rendering
+  updatePlayerSmoothTransitions(frameDelta);
 
   // Calculate interpolation fraction for rendering
   const interpolation = accumulatedTime / FIXED_TIMESTEP;
@@ -73,6 +84,50 @@ export function gameLoop(timestamp) {
   updateCamera(cameraDeltaTime);
   drawPlayers(interpolation);
   requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Updates smooth position transitions for all players
+ */
+function updatePlayerSmoothTransitions(frameDelta) {
+  const now = performance.now();
+
+  Object.values(players).forEach((player) => {
+    if (player._smoothTransition) {
+      const elapsed = now - player._smoothTransition.startTime;
+      const progress = Math.min(1, elapsed / player._smoothTransition.duration);
+
+      if (progress >= 1) {
+        // Transition complete
+        player._smoothTransition = null;
+      } else {
+        // Apply smooth easing
+        const easedProgress = easeOutCubic(progress);
+        const currentX =
+          player._smoothTransition.startX +
+          (player._smoothTransition.targetX - player._smoothTransition.startX) *
+            easedProgress;
+        const currentY =
+          player._smoothTransition.startY +
+          (player._smoothTransition.targetY - player._smoothTransition.startY) *
+            easedProgress;
+
+        // Update render position for ultra-smooth display
+        if (!player.renderX) player.renderX = currentX;
+        if (!player.renderY) player.renderY = currentY;
+
+        player.renderX += (currentX - player.renderX) * 0.3;
+        player.renderY += (currentY - player.renderY) * 0.3;
+      }
+    }
+  });
+}
+
+/**
+ * Smooth easing function
+ */
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
 }
 
 /**

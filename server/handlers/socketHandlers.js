@@ -77,7 +77,7 @@ export function setupSocketHandlers(
       }, {}),
       trees,
       stones,
-      walls, // Add this line
+      walls,
       spikes, // Add spikes to initial game state
     });
 
@@ -306,11 +306,13 @@ export function setupSocketHandlers(
     });
 
     // Update attack handler
-    socket.on("attackStart", () => {
+    socket.on("attackStart", (attackData = {}) => {
       const player = players[socket.id];
       if (!player || player.isDead) return;
 
       const now = Date.now();
+      const attackTime = attackData.timestamp || now;
+
       if (
         player.lastAttackTime &&
         now - player.lastAttackTime < gameItems.hammer.cooldown
@@ -327,11 +329,11 @@ export function setupSocketHandlers(
       io.emit("playerAttackStart", {
         id: socket.id,
         startTime: now,
-        rotation: player.rotation, // Include rotation for consistent animation direction
+        rotation: player.rotation,
       });
 
-      // Process attack immediately instead of waiting
-      processAttack(socket.id, players, walls, spikes, gameConfig);
+      // Process attack with lag compensation for players
+      processAttackWithLagCompensation(socket.id, attackTime, players, walls, spikes, gameConfig, gameItems, io, gameFunctions);
 
       // End attack state after animation
       setTimeout(() => {
@@ -564,9 +566,9 @@ export function setupSocketHandlers(
 }
 
 /**
- * Process attack with lag compensation
+ * Process attack with lag compensation for players and immediate damage for static objects
  */
-function processAttackWithLagCompensation(attackerId, attackTime, players, walls, spikes, gameConfig, gameItems, io) {
+function processAttackWithLagCompensation(attackerId, attackTime, players, walls, spikes, gameConfig, gameItems, io, gameFunctions) {
   const attacker = players[attackerId];
   if (!attacker) return;
 
@@ -609,6 +611,89 @@ function processAttackWithLagCompensation(attackerId, attackTime, players, walls
     }
   });
 
-  // Process damage to walls and spikes (no lag compensation needed for static objects)
-  gameFunctions.processStaticObjectDamage(attackerId, weapon, walls, spikes, gameConfig, io);
+  // Process damage to walls and spikes immediately (no lag compensation needed for static objects)
+  processStaticObjectDamage(attacker, weapon, walls, spikes, gameConfig, io);
+}
+
+/**
+ * Process damage to static objects (walls, spikes) without lag compensation
+ */
+function processStaticObjectDamage(attacker, weapon, walls, spikes, gameConfig, io) {
+  const attackRange = weapon.range || 120;
+  const arcAngle = Math.PI / 1.5; // 120 degrees
+  const playerAngle = attacker.rotation + Math.PI / 2;
+
+  // Process damage to walls
+  processDamageToEntity(
+    walls,
+    "wall",
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  );
+
+  // Process damage to spikes
+  processDamageToEntity(
+    spikes,
+    "spike",
+    attacker,
+    attackRange,
+    arcAngle,
+    playerAngle,
+    weapon,
+    gameConfig,
+    io
+  );
+}
+
+/**
+ * Shared damage processing logic for static entities like walls and spikes
+ */
+function processDamageToEntity(
+  entities,
+  entityType,
+  attacker,
+  attackRange,
+  arcAngle,
+  playerAngle,
+  weapon,
+  gameConfig,
+  io
+) {
+  for (let index = entities.length - 1; index >= 0; index--) {
+    const entity = entities[index];
+    const dx = entity.x - attacker.x;
+    const dy = entity.y - attacker.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= attackRange + gameConfig.collision.sizes[entityType]) {
+      const angleToEntity = Math.atan2(dy, dx);
+      let angleDiff = angleToEntity - playerAngle;
+      
+      // Normalize angle difference
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+      
+      const absAngleDiff = Math.abs(angleDiff);
+
+      if (absAngleDiff <= arcAngle / 2) {
+        entity.health -= weapon.damage || 15;
+
+        if (entity.health <= 0) {
+          entities.splice(index, 1);
+          io.emit(`${entityType}Destroyed`, { x: entity.x, y: entity.y });
+        } else {
+          io.emit(`${entityType}Damaged`, {
+            x: entity.x,
+            y: entity.y,
+            health: entity.health,
+          });
+        }
+      }
+    }
+  }
 }

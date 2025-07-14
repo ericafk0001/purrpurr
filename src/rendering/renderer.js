@@ -178,23 +178,52 @@ export function drawBackground() {
 function getInterpolatedPosition(player) {
   const now = Date.now();
   
-  // Reduce interpolation delay for more responsive movement
-  const baseDelay = 80; // Reduced from 150ms
-  const maxDelay = 200;  // Reduced from 300ms
+  // Enhanced adaptive interpolation system
+  const baseDelay = 120; // Slightly increased for more stability
+  const maxDelay = 250;  // Higher max for poor connections
   
-  // Calculate average time between position updates to adapt to network conditions
-  let avgTimeDelta = 80; // Default assumption
-  if (player.positionHistory && player.positionHistory.length >= 3) {
-    const recent = player.positionHistory.slice(-3);
+  // Detect client refresh rate and network conditions
+  const estimatedRefreshRate = Math.min(240, Math.max(60, 1000 / (performance.now() - (window.lastRenderTime || performance.now()))));
+  window.lastRenderTime = performance.now();
+  
+  // Calculate network jitter and packet timing
+  let avgTimeDelta = 80;
+  let jitterVariance = 0;
+  
+  if (player.positionHistory && player.positionHistory.length >= 4) {
+    const recent = player.positionHistory.slice(-6); // Use more samples
     const deltas = [];
+    
     for (let i = 1; i < recent.length; i++) {
-      deltas.push(recent[i].timestamp - recent[i-1].timestamp);
+      const timeDelta = recent[i].timestamp - recent[i-1].timestamp;
+      if (timeDelta > 0 && timeDelta < 500) {
+        deltas.push(timeDelta);
+      }
     }
-    avgTimeDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+    
+    if (deltas.length > 2) {
+      avgTimeDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+      
+      // Calculate jitter (variance in packet timing)
+      const variance = deltas.reduce((sum, delta) => sum + Math.pow(delta - avgTimeDelta, 2), 0) / deltas.length;
+      jitterVariance = Math.sqrt(variance);
+    }
   }
   
-  // More aggressive adaptive delay for better responsiveness
-  const adaptiveDelay = Math.min(maxDelay, Math.max(baseDelay, avgTimeDelta * 1.2));
+  // Adaptive delay based on refresh rate and network conditions
+  let adaptiveDelay = baseDelay;
+  
+  // Increase buffer for high refresh rates to prevent stuttering
+  if (estimatedRefreshRate > 120) {
+    adaptiveDelay = Math.max(adaptiveDelay, avgTimeDelta * 1.8);
+  }
+  
+  // Increase buffer for jittery connections
+  if (jitterVariance > 15) {
+    adaptiveDelay = Math.max(adaptiveDelay, avgTimeDelta * 1.5 + jitterVariance);
+  }
+  
+  adaptiveDelay = Math.min(maxDelay, adaptiveDelay);
   const targetTime = now - adaptiveDelay;
 
   if (!player.positionHistory || player.positionHistory.length < 2) {
@@ -205,8 +234,8 @@ function getInterpolatedPosition(player) {
     };
   }
 
-  // Clean old history more aggressively
-  const cutoffTime = now - 500; // Keep only last 500ms of history
+  // Keep longer history for better interpolation quality
+  const cutoffTime = now - Math.max(2000, adaptiveDelay * 6);
   player.positionHistory = player.positionHistory.filter(pos => pos.timestamp > cutoffTime);
 
   if (player.positionHistory.length < 2) {
@@ -217,13 +246,12 @@ function getInterpolatedPosition(player) {
     };
   }
 
-  // Find interpolation points with improved logic
+  const sortedHistory = [...player.positionHistory].sort((a, b) => a.timestamp - b.timestamp);
+  
   let before = null;
   let after = null;
 
-  // Sort by timestamp to ensure proper ordering
-  const sortedHistory = [...player.positionHistory].sort((a, b) => a.timestamp - b.timestamp);
-
+  // Find optimal interpolation bracket
   for (let i = 0; i < sortedHistory.length - 1; i++) {
     const current = sortedHistory[i];
     const next = sortedHistory[i + 1];
@@ -235,32 +263,50 @@ function getInterpolatedPosition(player) {
     }
   }
 
-  // Improved fallback strategy
+  // Enhanced extrapolation with velocity-based prediction
   if (!before || !after) {
-    // Use the two most recent positions for extrapolation
-    if (sortedHistory.length >= 2) {
-      before = sortedHistory[sortedHistory.length - 2];
-      after = sortedHistory[sortedHistory.length - 1];
+    if (sortedHistory.length >= 3) {
+      const p1 = sortedHistory[sortedHistory.length - 3];
+      const p2 = sortedHistory[sortedHistory.length - 2];
+      const p3 = sortedHistory[sortedHistory.length - 1];
       
-      // Allow limited extrapolation for smoother movement
-      const timeDiff = after.timestamp - before.timestamp;
-      const extrapolationTime = targetTime - after.timestamp;
+      const extrapolationTime = targetTime - p3.timestamp;
       
-      if (extrapolationTime > 0 && extrapolationTime < timeDiff * 0.5) {
-        // Safe extrapolation - extend the trend slightly
-        const extrapolationFactor = extrapolationTime / timeDiff;
-        const velocityX = (after.x - before.x) / timeDiff;
-        const velocityY = (after.y - before.y) / timeDiff;
+      // Allow reasonable extrapolation for smoother movement
+      if (extrapolationTime > 0 && extrapolationTime < adaptiveDelay * 0.4) {
+        // Calculate velocity with acceleration consideration
+        const dt1 = p2.timestamp - p1.timestamp;
+        const dt2 = p3.timestamp - p2.timestamp;
         
-        return {
-          x: after.x + velocityX * extrapolationTime,
-          y: after.y + velocityY * extrapolationTime,
-          rotation: after.rotation,
-        };
+        if (dt1 > 0 && dt2 > 0) {
+          // Current velocity
+          const vx2 = (p3.x - p2.x) / dt2;
+          const vy2 = (p3.y - p2.y) / dt2;
+          
+          // Previous velocity
+          const vx1 = (p2.x - p1.x) / dt1;
+          const vy1 = (p2.y - p1.y) / dt1;
+          
+          // Acceleration
+          const ax = (vx2 - vx1) / dt2;
+          const ay = (vy2 - vy1) / dt2;
+          
+          // Predict position with velocity + acceleration
+          const predictedX = p3.x + vx2 * extrapolationTime + 0.5 * ax * extrapolationTime * extrapolationTime;
+          const predictedY = p3.y + vy2 * extrapolationTime + 0.5 * ay * extrapolationTime * extrapolationTime;
+          
+          // Dampen acceleration for stability
+          const dampingFactor = Math.max(0.3, 1 - extrapolationTime / (adaptiveDelay * 0.4));
+          
+          return {
+            x: p3.x + (predictedX - p3.x) * dampingFactor,
+            y: p3.y + (predictedY - p3.y) * dampingFactor,
+            rotation: p3.rotation,
+          };
+        }
       }
     }
     
-    // Final fallback to most recent position
     const latest = sortedHistory[sortedHistory.length - 1];
     return {
       x: latest?.x || player.x,
@@ -269,29 +315,44 @@ function getInterpolatedPosition(player) {
     };
   }
 
-  // Calculate interpolation factor
+  // High-quality interpolation with adaptive smoothing
   const timeDiff = after.timestamp - before.timestamp;
   const targetDiff = targetTime - before.timestamp;
   let factor = timeDiff > 0 ? targetDiff / timeDiff : 0;
   
-  // Allow slight extrapolation but clamp to reasonable bounds
-  factor = Math.min(1.1, Math.max(-0.1, factor));
+  // Adaptive bounds based on network conditions
+  const maxExtrapolation = jitterVariance > 10 ? 1.05 : 1.1;
+  factor = Math.min(maxExtrapolation, Math.max(-0.05, factor));
 
-  // Apply easing for smoother movement
-  const easedFactor = easeInOutCubic(Math.max(0, Math.min(1, factor)));
+  // Choose easing based on refresh rate and network quality
+  let easedFactor;
+  if (estimatedRefreshRate > 144 && jitterVariance < 5) {
+    // High refresh + stable network: use linear for minimal latency
+    easedFactor = Math.max(0, Math.min(1, factor));
+  } else if (jitterVariance > 20) {
+    // Jittery network: use heavy smoothing
+    easedFactor = easeInOutQuart(Math.max(0, Math.min(1, factor)));
+  } else {
+    // Standard case: balanced smoothing
+    easedFactor = easeInOutQuint(Math.max(0, Math.min(1, factor)));
+  }
 
-  // Interpolate position
   const interpolatedX = before.x + (after.x - before.x) * easedFactor;
   const interpolatedY = before.y + (after.y - before.y) * easedFactor;
 
-  // Validate interpolated position isn't too far from actual (reduced threshold)
+  // Adaptive error correction based on network quality
   const distanceFromActual = Math.sqrt(
     Math.pow(interpolatedX - player.x, 2) + Math.pow(interpolatedY - player.y, 2)
   );
   
-  // Reduce correction threshold for smoother movement
-  if (distanceFromActual > 100) { // Reduced from 200px
-    const blendFactor = 0.05; // Reduced from 0.1 for gentler correction
+  // Dynamic error threshold
+  let errorThreshold = 60;
+  if (estimatedRefreshRate > 120) errorThreshold = 40;
+  if (jitterVariance > 15) errorThreshold = 100;
+  
+  if (distanceFromActual > errorThreshold) {
+    // Gentler correction for high refresh rates
+    const blendFactor = estimatedRefreshRate > 120 ? 0.02 : 0.08;
     return {
       x: interpolatedX * (1 - blendFactor) + player.x * blendFactor,
       y: interpolatedY * (1 - blendFactor) + player.y * blendFactor,
@@ -299,16 +360,17 @@ function getInterpolatedPosition(player) {
     };
   }
 
-  // Improved rotation interpolation
+  // Enhanced rotation interpolation with wraparound handling
   let rotationDiff = after.rotation - before.rotation;
   
-  // Handle angle wrapping more smoothly
+  // Handle angle wraparound more smoothly
   if (rotationDiff > Math.PI) {
     rotationDiff -= 2 * Math.PI;
   } else if (rotationDiff < -Math.PI) {
     rotationDiff += 2 * Math.PI;
   }
-
+  
+  // Use same easing for rotation
   const interpolatedRotation = before.rotation + rotationDiff * easedFactor;
 
   return {
@@ -317,11 +379,15 @@ function getInterpolatedPosition(player) {
     rotation: interpolatedRotation,
   };
 }
-//67 mustard
+
 /**
- * Easing function for smoother interpolation
+ * Enhanced easing functions for different scenarios
  */
-function easeInOutCubic(t) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function easeInOutQuint(t) {
+  return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
+}
+
+function easeInOutQuart(t) {
+  return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 }
 

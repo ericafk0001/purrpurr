@@ -4,21 +4,51 @@ import { drawChatBubble } from "../ui/chat.js";
 
 /**
  * Draws the player character at its current or interpolated position, applying rotation for movement and attack animations, and renders the equipped item and chat bubble if present.
- *
- * The player sprite is rendered relative to the camera, with attack swings smoothly animating the sprite's rotation. If the player has an equipped item, it is drawn with appropriate positioning and scaling. A chat bubble is displayed if the player has active chat content.
  */
 export function drawPlayer(player) {
   if (!player) return;
 
-  // Use render position if available, otherwise use actual position
-  const x = player.renderX !== undefined ? player.renderX : player.x;
-  const y = player.renderY !== undefined ? player.renderY : player.y;
-  const rotation = player.renderRotation !== undefined ? player.renderRotation : player.rotation;
+  // Enhanced position calculation with client-side prediction
+  let x, y, rotation;
+  
+  if (player.renderX !== undefined) {
+    // For remote players, use interpolated positions
+    x = player.renderX;
+    y = player.renderY;
+    rotation = player.renderRotation !== undefined ? player.renderRotation : player.rotation;
+  } else {
+    // For local player, add micro-smoothing for ultra-responsive feel
+    x = player.x;
+    y = player.y;
+    rotation = player.rotation;
+    
+    // Apply client-side smoothing to local player movement
+    if (player === myPlayer) {
+      // Store previous render position for smoothing
+      if (!player._lastRenderPos) {
+        player._lastRenderPos = { x: x, y: y, timestamp: performance.now() };
+      }
+      
+      const now = performance.now();
+      const timeDelta = now - player._lastRenderPos.timestamp;
+      
+      if (timeDelta > 0 && timeDelta < 100) { // Only smooth for reasonable time deltas
+        const smoothingFactor = Math.min(1, timeDelta / 16.67); // Target 60fps smoothing
+        const lerpFactor = 1 - Math.pow(0.1, smoothingFactor); // Exponential smoothing
+        
+        x = player._lastRenderPos.x + (x - player._lastRenderPos.x) * lerpFactor;
+        y = player._lastRenderPos.y + (y - player._lastRenderPos.y) * lerpFactor;
+      }
+      
+      // Update stored position
+      player._lastRenderPos = { x: x, y: y, timestamp: now };
+    }
+  }
 
   const screenX = x - camera.x;
   const screenY = y - camera.y;
 
-  // Store the EXACT render position of the sprite for UI alignment (for ALL players)
+  // Store the EXACT render position of the sprite for UI alignment
   player.spriteX = screenX;
   player.spriteY = screenY;
   player.spriteRotation = rotation;
@@ -35,31 +65,32 @@ export function drawPlayer(player) {
 
     let baseRotation = rotation || 0;
 
+    // Enhanced attack animation with smoother transitions
     if (player.attacking && player.attackProgress !== undefined) {
       const maxSwingAngle = (110 * Math.PI) / 180;
       let swingAngle = 0;
 
-      // Use the rotation from when the attack started for consistent direction
-      const attackRotation =
-        player.attackStartRotation !== undefined
-          ? player.attackStartRotation
-          : baseRotation;
+      const attackRotation = player.attackStartRotation !== undefined
+        ? player.attackStartRotation
+        : baseRotation;
 
+      // Smooth attack animation curve
       if (player.attackProgress < 0.5) {
-        swingAngle = -(player.attackProgress / 0.5) * maxSwingAngle;
+        // Swing out with ease-out
+        const easeOut = 1 - Math.pow(1 - (player.attackProgress / 0.5), 3);
+        swingAngle = -easeOut * maxSwingAngle;
       } else {
-        swingAngle =
-          -maxSwingAngle +
-          ((player.attackProgress - 0.5) / 0.5) * maxSwingAngle;
+        // Swing back with ease-in
+        const easeIn = Math.pow((player.attackProgress - 0.5) / 0.5, 2);
+        swingAngle = -maxSwingAngle + easeIn * maxSwingAngle;
       }
 
-      // Apply swing to the attack start rotation, not current rotation
       baseRotation = attackRotation + swingAngle;
     }
 
     ctx.rotate(baseRotation);
 
-    // Draw equipped item for all players if they have inventory
+    // Draw equipped item
     if (player.inventory && player.inventory.slots) {
       const activeItem = player.inventory.slots[player.inventory.activeSlot];
       if (activeItem && assets[activeItem.id]) {
@@ -78,12 +109,8 @@ export function drawPlayer(player) {
 
     ctx.restore();
     
-    // Use render position for chat bubble too
-    const chatPlayer = {
-      ...player,
-      x: x,
-      y: y
-    };
+    // Use render position for chat bubble
+    const chatPlayer = { ...player, x: x, y: y };
     drawChatBubble(chatPlayer);
   }
 }
