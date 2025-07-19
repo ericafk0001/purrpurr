@@ -3,7 +3,7 @@ import { updatePosition, updateRotation } from "../player/player.js";
 import { updateCamera } from "./camera.js";
 import { drawPlayers } from "../rendering/renderer.js";
 import {
-  startAttack,
+  requestAttack,
   canAutoAttackWithCurrentItem,
   isAttacking,
   lastAttackTime,
@@ -144,9 +144,13 @@ export function updateGameLogic(deltaTime) {
     const attackTime = Date.now();
     const attackElapsed = attackTime - lastAttackTime;
 
-    if (attackElapsed <= attackDuration) {
+    // Get the actual weapon animation duration
+    const activeItem = myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
+    const weaponUseTime = activeItem ? items[activeItem.id]?.useTime || 250 : 250;
+
+    if (attackElapsed <= weaponUseTime) {
       // Update animation progress
-      const newProgress = Math.min(1, attackElapsed / attackDuration);
+      const newProgress = Math.min(1, attackElapsed / weaponUseTime);
       setAttackAnimationProgress(newProgress);
       myPlayer.attackProgress = newProgress;
       myPlayer.attackStartTime = lastAttackTime;
@@ -160,14 +164,8 @@ export function updateGameLogic(deltaTime) {
 
       // Queue next attack only if auto-attack is enabled and we have valid weapon
       if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-        // Get cooldown from the currently equipped weapon
-        const activeItem =
-          myPlayer.inventory?.slots?.[myPlayer.inventory.activeSlot];
-        const weaponCooldown = activeItem
-          ? items[activeItem.id]?.cooldown || 800
-          : 800;
-        const cooldownRemaining = weaponCooldown - attackDuration;
-        setTimeout(startAttack, Math.max(0, cooldownRemaining));
+        // Request next attack immediately - the attack system will handle cooldown timing
+        requestAttack();
       }
     }
   }

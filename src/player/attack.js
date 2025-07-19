@@ -12,43 +12,105 @@ export let autoAttackEnabled = false; // New toggle for auto-attack mode
 export const ATTACK_BUFFER_WINDOW = 200; // Buffer window in milliseconds
 export let lastAttackAttempt = 0;
 
+// Attack buffering system
+let pendingAttackRequest = false;
+let attackRequestBuffer = null;
+let lastServerAttackTime = 0;
+let nextAttackScheduled = false;
+
 /**
- * Initiates a player attack if the current item supports auto-attack and cooldown conditions are met.
- *
- * Starts the attack animation, updates player attack state, and emits an "attackStart" event to the server. Attack initiation is allowed if the cooldown has elapsed or within a buffer window after a recent attempt.
+ * Requests an attack from the server without starting animation immediately.
+ * Animation will start when server confirms the attack.
  */
-export function startAttack() {
+export function requestAttack() {
   if (!canAutoAttackWithCurrentItem()) return;
 
   const now = Date.now();
   const cooldown = items.hammer.cooldown || 800;
-  lastAttackAttempt = now; // Record the attempt time
-
-  // Check if we're in cooldown
-  const timeSinceLastAttack = now - lastAttackTime;
-
-  // Allow attack if either:
-  // 1. Cooldown is completely finished, or
-  // 2. We're within buffer window and have a recent attack attempt
-  if (
-    timeSinceLastAttack > cooldown ||
-    (timeSinceLastAttack > cooldown - ATTACK_BUFFER_WINDOW &&
-      lastAttackAttempt > lastAttackTime)
-  ) {
-    isAttacking = true;
-    lastAttackTime = now;
-    attackAnimationProgress = 0;
-
-    if (myPlayer) {
-      myPlayer.attacking = true;
-      myPlayer.attackProgress = 0;
-      myPlayer.attackStartTime = now;
-      // Capture the rotation at attack start for consistent animation
-      myPlayer.attackStartRotation = myPlayer.rotation;
+  
+  // Check if we're still in cooldown based on server time
+  const timeSinceLastServerAttack = now - lastServerAttackTime;
+  
+  if (timeSinceLastServerAttack >= cooldown && !pendingAttackRequest) {
+    // Can attack immediately
+    socket.emit("attackStart", { timestamp: now });
+    pendingAttackRequest = true;
+  } else {
+    // Buffer this attack request (only keep the most recent one)
+    attackRequestBuffer = { timestamp: now, rotation: myPlayer?.rotation };
+    
+    // Schedule buffered attack if not already scheduled
+    if (!nextAttackScheduled) {
+      nextAttackScheduled = true;
+      const remainingCooldown = Math.max(0, cooldown - timeSinceLastServerAttack);
+      
+      setTimeout(() => {
+        processBufferedAttack();
+      }, remainingCooldown);
     }
-
-    socket.emit("attackStart");
   }
+}
+
+/**
+ * Process the buffered attack if any
+ */
+function processBufferedAttack() {
+  nextAttackScheduled = false;
+  
+  if (!attackRequestBuffer || !canAutoAttackWithCurrentItem() || pendingAttackRequest) {
+    attackRequestBuffer = null;
+    return;
+  }
+  
+  const now = Date.now();
+  const cooldown = items.hammer.cooldown || 800;
+  const timeSinceLastServerAttack = now - lastServerAttackTime;
+  
+  if (timeSinceLastServerAttack >= cooldown) {
+    // Send the buffered attack
+    const bufferedAttack = attackRequestBuffer;
+    attackRequestBuffer = null;
+    
+    socket.emit("attackStart", { 
+      timestamp: now,
+      originalTimestamp: bufferedAttack.timestamp 
+    });
+    pendingAttackRequest = true;
+  } else {
+    // Still in cooldown, reschedule
+    const remainingCooldown = cooldown - timeSinceLastServerAttack;
+    nextAttackScheduled = true;
+    setTimeout(() => {
+      processBufferedAttack();
+    }, remainingCooldown);
+  }
+}
+
+/**
+ * Called when server confirms our attack - start the animation
+ */
+export function startAttackAnimation(serverData) {
+  if (!myPlayer) return;
+  
+  const now = Date.now();
+  
+  isAttacking = true;
+  lastAttackTime = now;
+  lastServerAttackTime = serverData.startTime || now;
+  attackAnimationProgress = 0;
+  pendingAttackRequest = false;
+
+  myPlayer.attacking = true;
+  myPlayer.attackProgress = 0;
+  myPlayer.attackStartTime = serverData.startTime || now;
+  myPlayer.attackStartRotation = serverData.rotation !== undefined ? serverData.rotation : myPlayer.rotation;
+}
+
+/**
+ * Legacy function - now just calls requestAttack for backward compatibility
+ */
+export function startAttack() {
+  requestAttack();
 }
 /**
  * Executes the appropriate attack or item action based on the currently active inventory item.
@@ -85,7 +147,7 @@ export function handleAttackAction() {
       });
     }
   } else {
-    startAttack();
+    requestAttack();
   }
 }
 
@@ -99,7 +161,7 @@ export function toggleAutoAttack() {
 
   // If enabling auto-attack and we have a valid weapon, start attacking
   if (autoAttackEnabled && canAutoAttackWithCurrentItem()) {
-    startAttack();
+    requestAttack();
   }
 }
 
@@ -172,5 +234,3 @@ export function setAttackAnimationProgress(value) {
 export function setLastAttackTime(value) {
   lastAttackTime = value;
 }
-
-// Attack system

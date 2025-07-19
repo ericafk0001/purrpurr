@@ -27,6 +27,7 @@ import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
 import { updateCamera } from "../core/camera.js";
 import { setMovementRestriction } from "../physics/movement.js";
+import { startAttackAnimation } from "../player/attack.js";
 
 /**
  * Sends player movement with sequence number for client-side prediction
@@ -292,6 +293,11 @@ socket.on("playerAttackStart", (data) => {
     // Use the rotation from the server for consistent animation direction
     players[data.id].attackStartRotation =
       data.rotation !== undefined ? data.rotation : players[data.id].rotation;
+  }
+  
+  // If this is our own player's attack, start the animation
+  if (data.id === socket.id) {
+    startAttackAnimation(data);
   }
 });
 

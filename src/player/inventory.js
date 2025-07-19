@@ -1,6 +1,6 @@
 // Import required functions from attack module
 import {
-  startAttack,
+  requestAttack,
   autoAttackEnabled,
   setIsAttacking,
   setLastAttackTime,
@@ -42,7 +42,7 @@ export function handleInventorySelection(index) {
     // Force start a new attack sequence
     setIsAttacking(false);
     setLastAttackTime(0);
-    startAttack();
+    requestAttack();
   }
 
   // Notify server of slot change
