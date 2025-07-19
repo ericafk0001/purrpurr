@@ -19,6 +19,19 @@ let lastServerAttackTime = 0;
 let nextAttackScheduled = false;
 
 /**
+ * Resets attack state for new players or when switching weapons
+ */
+export function resetAttackState() {
+  pendingAttackRequest = false;
+  attackRequestBuffer = null;
+  nextAttackScheduled = false;
+  lastServerAttackTime = 0;
+  isAttacking = false;
+  attackAnimationProgress = 0;
+  lastAttackTime = 0;
+}
+
+/**
  * Requests an attack from the server without starting animation immediately.
  * Animation will start when server confirms the attack.
  */
@@ -26,7 +39,10 @@ export function requestAttack() {
   if (!canAutoAttackWithCurrentItem()) return;
 
   const now = Date.now();
-  const cooldown = items.hammer.cooldown || 800;
+  
+  // Get cooldown from currently equipped weapon
+  const activeItem = myPlayer?.inventory?.slots?.[myPlayer?.inventory?.activeSlot];
+  const cooldown = activeItem ? items[activeItem.id]?.cooldown || 400 : 400;
   
   // Check if we're still in cooldown based on server time
   const timeSinceLastServerAttack = now - lastServerAttackTime;
@@ -63,7 +79,11 @@ function processBufferedAttack() {
   }
   
   const now = Date.now();
-  const cooldown = items.hammer.cooldown || 800;
+  
+  // Get cooldown from currently equipped weapon
+  const activeItem = myPlayer?.inventory?.slots?.[myPlayer?.inventory?.activeSlot];
+  const cooldown = activeItem ? items[activeItem.id]?.cooldown || 400 : 400;
+  
   const timeSinceLastServerAttack = now - lastServerAttackTime;
   
   if (timeSinceLastServerAttack >= cooldown) {

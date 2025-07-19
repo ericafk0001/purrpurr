@@ -4,6 +4,7 @@ import {
   autoAttackEnabled,
   setIsAttacking,
   setLastAttackTime,
+  resetAttackState,
 } from "./attack.js";
 import { myPlayer, canvas, socket, config } from "../utils/constants.js";
 import { chatMode } from "../ui/chat.js";
@@ -39,9 +40,8 @@ export function handleInventorySelection(index) {
 
   // Check if switching to a weapon slot while auto-attack is enabled
   if (autoAttackEnabled && newSlotItem?.id === "hammer") {
-    // Force start a new attack sequence
-    setIsAttacking(false);
-    setLastAttackTime(0);
+    // Reset attack state and start a new attack sequence
+    resetAttackState();
     requestAttack();
   }
 

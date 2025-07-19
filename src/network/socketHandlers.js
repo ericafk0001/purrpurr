@@ -27,7 +27,7 @@ import { playerMessages } from "../ui/chat.js";
 import { showDeathScreen, hideDeathScreen } from "../ui/hud.js";
 import { updateCamera } from "../core/camera.js";
 import { setMovementRestriction } from "../physics/movement.js";
-import { startAttackAnimation } from "../player/attack.js";
+import { startAttackAnimation, resetAttackState } from "../player/attack.js";
 
 /**
  * Sends player movement with sequence number for client-side prediction
@@ -220,6 +220,9 @@ socket.on("initGame", (gameState) => {
   setWalls(gameState.walls || []); // Add this line
   setSpikes(gameState.spikes || []); // Add spikes to initial game state
   setMyPlayer(players[socket.id]);
+  
+  // Reset attack state for new player
+  resetAttackState();
 });
 
 // Add new socket handler for wall placement
@@ -289,6 +292,10 @@ socket.on("playerAttackStart", (data) => {
     players[data.id].attacking = true;
     players[data.id].attackStartTime = startTime;
     players[data.id].attackProgress = 0;
+    
+    // Store weapon info from server for consistent animation timing
+    players[data.id].attackWeaponId = data.weaponId || "hammer";
+    players[data.id].attackUseTime = data.useTime || 250;
 
     // Use the rotation from the server for consistent animation direction
     players[data.id].attackStartRotation =
@@ -307,6 +314,8 @@ socket.on("playerAttackEnd", (data) => {
     players[data.id].attackProgress = 0;
     players[data.id].attackStartTime = null;
     players[data.id].attackStartRotation = null;
+    players[data.id].attackWeaponId = null;
+    players[data.id].attackUseTime = null;
   }
 });
 

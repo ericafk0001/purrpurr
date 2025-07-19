@@ -176,11 +176,17 @@ export function updateGameLogic(deltaTime) {
     if (!player.attacking || !player.attackStartTime) return;
 
     const elapsed = animTime - player.attackStartTime;
-    // Get attack duration from player's weapon or use default
-    const activeItem = player.inventory?.slots?.[player.inventory.activeSlot];
-    const attackDuration = activeItem
-      ? items[activeItem.id]?.useTime || 400
-      : 400;
+    
+    // Use server-provided timing for consistent animations
+    let attackDuration;
+    if (player.attackUseTime) {
+      // Use timing from server (for other players)
+      attackDuration = player.attackUseTime;
+    } else {
+      // Fallback to local calculation (for local player)
+      const activeItem = player.inventory?.slots?.[player.inventory.activeSlot];
+      attackDuration = activeItem ? items[activeItem.id]?.useTime || 250 : 250;
+    }
 
     // Update animation progress
     if (elapsed <= attackDuration) {
@@ -191,6 +197,8 @@ export function updateGameLogic(deltaTime) {
       player.attackProgress = 0;
       player.attackStartTime = null;
       player.attackStartRotation = null;
+      player.attackWeaponId = null;
+      player.attackUseTime = null;
     }
   });
 

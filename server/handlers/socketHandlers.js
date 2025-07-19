@@ -325,23 +325,29 @@ export function setupSocketHandlers(
       player.lastAttackTime = now;
       player.attackProgress = 0;
 
-      // Broadcast attack start with timing info and rotation
+      // Get weapon info for consistent timing
+      const activeItem = player.inventory.slots[player.inventory.activeSlot];
+      const weaponUseTime = activeItem ? gameItems[activeItem.id]?.useTime || 250 : 250;
+
+      // Broadcast attack start with timing info, rotation, and weapon info
       io.emit("playerAttackStart", {
         id: socket.id,
         startTime: now,
         rotation: player.rotation,
+        weaponId: activeItem?.id || "hammer",
+        useTime: weaponUseTime,
       });
 
       // Process attack with lag compensation for players
       processAttackWithLagCompensation(socket.id, attackTime, players, walls, spikes, gameConfig, gameItems, io, gameFunctions);
 
-      // End attack state after animation
+      // End attack state after animation using correct weapon timing
       setTimeout(() => {
         if (player.attacking) {
           player.attacking = false;
           io.emit("playerAttackEnd", { id: socket.id });
         }
-      }, gameItems.hammer.useTime);
+      }, weaponUseTime);
     });
 
     socket.on("disconnect", () => {
